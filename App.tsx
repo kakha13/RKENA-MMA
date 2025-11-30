@@ -128,10 +128,10 @@ const App: React.FC = () => {
             </button>
 
             <a 
-              href="https://www.kisa.ge/donate/63shrjr55q" 
+              href="https://www.kisa.ge/donate/kakha13" 
               target="_blank" 
               rel="noopener noreferrer" 
-              className="mt-8 px-6 py-3 bg-yellow-400 text-black font-bold uppercase tracking-wider rounded shadow hover:bg-yellow-300 transition-colors active:scale-95 flex items-center gap-2"
+              className="mt-8 px-6 py-3 bg-white text-black font-bold uppercase tracking-wider rounded-none shadow hover:brightness-110 transition-colors active:scale-95 flex items-center gap-2"
             >
                 <span>🎁</span> დონაცია
             </a>
@@ -144,7 +144,7 @@ const App: React.FC = () => {
             {gameState === GameState.VICTORY ? (
               <Trophy className="w-20 h-20 md:w-24 md:h-24 text-yellow-400 mb-4 animate-bounce" />
             ) : (
-              // Skull removed as requested
+              // Skull removed, replaced with text badge
               <div className="w-20 h-20 md:w-24 md:h-24 text-gray-500 mb-4 flex items-center justify-center border-4 border-gray-700 rounded-full">
                   <span className="text-4xl font-black">KO</span>
               </div>
@@ -162,10 +162,10 @@ const App: React.FC = () => {
             </button>
 
             <a 
-              href="https://www.kisa.ge/donate/63shrjr55q" 
+              href="https://www.kisa.ge/donate/kakha13" 
               target="_blank" 
               rel="noopener noreferrer" 
-              className="mt-6 px-6 py-3 bg-yellow-400 text-black font-bold uppercase tracking-wider rounded shadow hover:bg-yellow-300 transition-colors active:scale-95 flex items-center gap-2"
+              className="mt-6 px-6 py-3 bg-white text-black font-bold uppercase tracking-wider rounded-none shadow hover:brightness-110 transition-colors active:scale-95 flex items-center gap-2"
             >
                 <span>🎁</span> დონაცია
             </a>

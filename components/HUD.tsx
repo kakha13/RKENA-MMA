@@ -44,15 +44,15 @@ const HUD: React.FC = () => {
           </div>
           
           {/* Health Bar */}
-          <div className="w-[95%] h-2 mt-1 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20">
+          <div className="w-[95%] h-2.5 mt-0.5 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20">
              <div 
                className="h-full bg-green-500 transition-all duration-200"
                style={{ width: `${(p1.health / p1.maxHealth) * 100}%` }}
              />
           </div>
 
-          {/* Stamina Bar */}
-          <div className="w-[60%] h-1.5 mt-1 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden">
+          {/* Stamina Bar (Immediately below health) */}
+          <div className="w-[60%] h-1.5 mt-0.5 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden">
              <div 
                className="h-full bg-blue-400 transition-all duration-200"
                style={{ width: `${(p1.stamina / p1.maxStamina) * 100}%` }}
@@ -95,15 +95,15 @@ const HUD: React.FC = () => {
           </div>
           
           {/* Health Bar */}
-          <div className="w-[95%] h-2 mt-1 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20 ml-auto">
+          <div className="w-[95%] h-2.5 mt-0.5 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20 ml-auto">
              <div 
                className="h-full bg-yellow-500 transition-all duration-200 ml-auto"
                style={{ width: `${(p2.health / p2.maxHealth) * 100}%` }}
              />
           </div>
 
-          {/* Stamina Bar */}
-          <div className="w-[60%] h-1.5 mt-1 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden ml-auto">
+          {/* Stamina Bar (Immediately below health) */}
+          <div className="w-[60%] h-1.5 mt-0.5 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden ml-auto">
              <div 
                className="h-full bg-blue-400 transition-all duration-200 ml-auto"
                style={{ width: `${(p2.stamina / p2.maxStamina) * 100}%` }}

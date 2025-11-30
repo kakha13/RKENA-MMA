@@ -102,23 +102,27 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
 
     // Movement
     if (!isBusy) {
+      // Slow down the bot (Jon Jones) to make him feel heavier/more tactical vs the lighter player
+      const speed = f.isPlayer ? MOVE_SPEED : MOVE_SPEED * 0.5; 
+
       if (controls.left) {
-        f.x -= MOVE_SPEED;
+        f.x -= speed;
         f.state = ActionState.WALK;
       } else if (controls.right) {
-        f.x += MOVE_SPEED;
+        f.x += speed;
         f.state = ActionState.WALK;
       } else {
         f.state = ActionState.IDLE;
       }
     } else if (f.state === ActionState.TAKEDOWN) {
-        // Lunge forward during the "SHOOT" phase of the animation (20% to 70% progress)
-        // With TAKEDOWN_FRAMES=50, this is roughly frames 40 down to 15.
-        if (f.stateTimer > 15 && f.stateTimer <= 40) {
-             f.x += f.direction * MOVE_SPEED * 1.5;
+        // Lunge forward during the "SHOOT" phase of the animation (approx 30% to 80% of frames remaining)
+        // Uses TAKEDOWN_FRAMES constant to ensure scaling with speed changes
+        if (f.stateTimer > TAKEDOWN_FRAMES * 0.3 && f.stateTimer <= TAKEDOWN_FRAMES * 0.8) {
+             const dashSpeed = f.isPlayer ? MOVE_SPEED * 1.5 : MOVE_SPEED * 1.1; // Slow down bot dash slightly
+             f.x += f.direction * dashSpeed;
              // Update hitbox position to follow the lunge
              if (f.hitbox) {
-                f.hitbox.x += f.direction * MOVE_SPEED * 1.5;
+                f.hitbox.x += f.direction * dashSpeed;
              }
         }
     }
