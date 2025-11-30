@@ -62,67 +62,70 @@ const Controls: React.FC<ControlsProps> = ({ onInput }) => {
           fontFamily: '"Press Start 2P", cursive' // Enforce Pixel Font
       }}
     >
-        <span className="text-white text-xl drop-shadow-md pt-1">{label}</span>
+        <span className="text-white text-lg landscape:text-sm drop-shadow-md pt-0.5">{label}</span>
     </button>
   );
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-end pb-6 px-6 select-none touch-none">
+    <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-end pb-2 landscape:pb-1 px-4 landscape:px-2 select-none touch-none">
       
       {/* Container for controls at bottom of screen */}
       <div className="w-full flex justify-between items-end pb-safe">
         
         {/* LEFT ZONE: Movement (Arrows) */}
-        <div className="pointer-events-auto flex gap-4 items-end pl-2 pb-2">
+        <div className="pointer-events-auto flex gap-2 landscape:gap-1 items-end pl-1 pb-1">
           <Btn 
             action="left" 
-            className="w-16 h-16 bg-gray-800/80 active:bg-gray-700 text-white" 
-            icon={<ArrowLeft size={32} />} 
+            className="w-14 h-14 landscape:w-12 landscape:h-12 bg-gray-800/80 active:bg-gray-700 text-white" 
+            icon={<ArrowLeft size={28} className="landscape:w-6 landscape:h-6" />} 
           />
           <Btn 
             action="right" 
-            className="w-16 h-16 bg-gray-800/80 active:bg-gray-700 text-white" 
-            icon={<ArrowRight size={32} />} 
+            className="w-14 h-14 landscape:w-12 landscape:h-12 bg-gray-800/80 active:bg-gray-700 text-white" 
+            icon={<ArrowRight size={28} className="landscape:w-6 landscape:h-6" />} 
           />
         </div>
 
         {/* RIGHT ZONE: Combat Layout (Closer Cluster) */}
-        <div className="pointer-events-auto relative w-[170px] h-[170px] mb-1 mr-1">
+        <div className="pointer-events-auto relative w-[140px] h-[140px] landscape:w-[110px] landscape:h-[110px] mb-1 mr-1">
             
-            {/* Top (Yellow) - Block -> Keyboard C */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 translate-y-2">
+            {/* Top (Yellow) - Block -> Keyboard E */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 translate-y-1">
                 <FaceBtn 
                     action="block" 
-                    label="C" 
+                    label="E" 
                     colorClass="bg-gradient-to-b from-yellow-400 to-orange-500" 
+                    sizeClass="w-11 h-11 landscape:w-9 landscape:h-9"
                 />
             </div>
 
-            {/* Right (Red) - Kick -> Keyboard X */}
-            <div className="absolute top-1/2 right-0 -translate-y-1/2 -translate-x-1">
+            {/* Right (Red) - Kick -> Keyboard W */}
+            <div className="absolute top-1/2 right-0 -translate-y-1/2 -translate-x-0">
                 <FaceBtn 
                     action="kick" 
-                    label="X" 
+                    label="W" 
                     colorClass="bg-gradient-to-b from-red-400 to-rose-600" 
+                    sizeClass="w-11 h-11 landscape:w-9 landscape:h-9"
                 />
             </div>
 
-            {/* Left (Purple) - Takedown -> Keyboard V */}
-            <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-1">
+            {/* Left (Purple) - Takedown -> Keyboard R */}
+            <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-0">
                 <FaceBtn 
                     action="takedown" 
-                    label="V" 
+                    label="R" 
                     colorClass="bg-gradient-to-b from-purple-400 to-violet-600" 
+                    sizeClass="w-11 h-11 landscape:w-9 landscape:h-9"
                 />
             </div>
 
-            {/* Bottom (Teal) - Punch -> Keyboard Z */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 -translate-y-1">
+            {/* Bottom (Teal) - Punch -> Keyboard Q */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 -translate-y-0">
                 <FaceBtn 
                     action="punch" 
-                    label="Z" 
+                    label="Q" 
                     colorClass="bg-gradient-to-b from-teal-300 to-teal-500" 
-                    sizeClass="w-20 h-20"
+                    sizeClass="w-14 h-14 landscape:w-11 landscape:h-11"
                 />
             </div>
         </div>

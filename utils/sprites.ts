@@ -58,15 +58,15 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
     backArmRot = 0.8 + bounce * 0.05;
 
   } else if (state === ActionState.WALK) {
-    const walkSpeed = 600; 
+    const walkSpeed = 250; // Faster walk animation
     const walkCycle = (time / walkSpeed); 
-    const strideSize = 0.6;
+    const strideSize = 0.5;
     frontLegRot = Math.sin(walkCycle) * strideSize;
     backLegRot = Math.sin(walkCycle + Math.PI) * strideSize; 
-    bodyY += Math.abs(Math.sin(walkCycle)) * (h * 0.03); 
-    bodyLean = 0.1;
-    frontArmRot = -0.5 + Math.sin(walkCycle + Math.PI) * 0.4; 
-    backArmRot = 0.5 + Math.sin(walkCycle) * 0.4;
+    bodyY += Math.abs(Math.sin(walkCycle)) * (h * 0.02); 
+    bodyLean = 0.08;
+    frontArmRot = -0.5 + Math.sin(walkCycle + Math.PI) * 0.35; 
+    backArmRot = 0.5 + Math.sin(walkCycle) * 0.35;
 
   } else if (state === ActionState.BLOCK) {
     const breath = Math.sin(time / 250) * 0.02;
@@ -79,13 +79,18 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
   } else if (state === ActionState.PUNCH) {
     const progress = 1 - (stateTimer / PUNCH_FRAMES);
     if (progress < 0.2) {
-       frontArmRot = -0.2; bodyLean = -0.1;
+       // Wind-up: pull arm back, lean back slightly
+       frontArmRot = -1.2; bodyLean = -0.15;
+       backArmRot = 0.6;
     } else if (progress < 0.5) {
-       frontArmRot = -1.57; frontArmExt = w * 0.9; bodyLean = 0.2;
+       // Extension: punch aimed at head (-1.9 = upward angle toward face)
+       frontArmRot = -1.9; frontArmExt = w * 0.55; bodyLean = 0.2;
+       backArmRot = 0.9;
     } else {
-       frontArmRot = -1.0; frontArmExt = w * 0.2;
+       // Recovery: retract arm
+       frontArmRot = -1.4; frontArmExt = w * 0.1; bodyLean = 0.1;
+       backArmRot = 0.7;
     }
-    backArmRot = 0.8;
 
   } else if (state === ActionState.KICK) {
     const progress = 1 - (stateTimer / KICK_FRAMES);
@@ -152,7 +157,13 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
   // 1. Back Arm
   ctx.save(); ctx.translate(torsoWidth * 0.2, shoulderY); ctx.rotate(backArmRot);
   ctx.fillStyle = color; ctx.fillRect(-limbWidth/2, 0, limbWidth, h * 0.35); 
-  ctx.fillStyle = '#cc0000'; ctx.fillRect(-limbWidth/2 - 2, h * 0.35, limbWidth + 4, limbWidth + 4);
+  // Black glove with colored stripe
+  const gloveY = h * 0.35;
+  const gloveH = limbWidth + 4;
+  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-limbWidth/2 - 2, gloveY, limbWidth + 4, gloveH);
+  // Stripe: blue for player, red for opponent
+  ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
+  ctx.fillRect(-limbWidth/2 - 2, gloveY + gloveH * 0.3, limbWidth + 4, 4);
   ctx.restore();
 
   // 2. Back Leg
@@ -256,7 +267,12 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
   let frontArmLen = h * 0.35 + frontArmExt;
   ctx.save(); ctx.translate(-torsoWidth * 0.2, shoulderY); ctx.rotate(frontArmRot);
   ctx.fillStyle = color; ctx.fillRect(-limbWidth/2, 0, limbWidth, frontArmLen); 
-  ctx.fillStyle = '#cc0000'; ctx.fillRect(-limbWidth/2 - 2, frontArmLen, limbWidth + 4, limbWidth + 6);
+  // Black glove with colored stripe
+  const frontGloveH = limbWidth + 6;
+  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-limbWidth/2 - 2, frontArmLen, limbWidth + 4, frontGloveH);
+  // Stripe: blue for player, red for opponent
+  ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
+  ctx.fillRect(-limbWidth/2 - 2, frontArmLen + frontGloveH * 0.3, limbWidth + 4, 4);
   ctx.restore();
 
   ctx.restore();
@@ -311,7 +327,7 @@ const drawCommentators = (ctx: CanvasRenderingContext2D, width: number, height: 
          ctx.rotate(-0.2); ctx.fillRect(0, 0, 12, 20); ctx.restore();
      }
   };
-  drawGuy(-110, 1); drawGuy(0, 2); drawGuy(110, 3);
+  drawGuy(-110, 2); drawGuy(0, 1); drawGuy(110, 3);
   ctx.restore();
 }
 
@@ -333,10 +349,21 @@ export const drawBackground = (ctx: CanvasRenderingContext2D, width: number, hei
 
   drawCommentators(ctx, width, height);
 
-  const centerPanelWidth = 500;
-  const centerPanelLeft = centerX - centerPanelWidth / 2;
-  const centerPanelRight = centerX + centerPanelWidth / 2;
-  const angleOffset = 70; 
+  // Octagon points (5 visible sides in perspective)
+  const octPoints = {
+    // Back wall (top in perspective)
+    backLeft: { x: centerX - 200, y: wallBaseY, topY: fenceTopY },
+    backRight: { x: centerX + 200, y: wallBaseY, topY: fenceTopY },
+    // Angled back corners
+    cornerLeft: { x: centerX - 350, y: wallBaseY + 30, topY: fenceTopY - 30 },
+    cornerRight: { x: centerX + 350, y: wallBaseY + 30, topY: fenceTopY - 30 },
+    // Side walls
+    sideLeft: { x: -80, y: wallBaseY + 80, topY: fenceTopY - 80 },
+    sideRight: { x: width + 80, y: wallBaseY + 80, topY: fenceTopY - 80 },
+    // Front corners (bottom of screen)
+    frontLeft: { x: -80, y: height + 50 },
+    frontRight: { x: width + 80, y: height + 50 },
+  };
 
   const drawFenceSegment = (x1: number, y1_bot: number, y1_top: number, x2: number, y2_bot: number, y2_top: number) => {
       ctx.save();
@@ -356,34 +383,64 @@ export const drawBackground = (ctx: CanvasRenderingContext2D, width: number, hei
       ctx.restore();
   };
 
-  drawFenceSegment(centerPanelLeft, wallBaseY, fenceTopY, centerPanelRight, wallBaseY, fenceTopY);
-  drawFenceSegment(-150, wallBaseY + angleOffset, fenceTopY - angleOffset, centerPanelLeft, wallBaseY, fenceTopY);
-  drawFenceSegment(centerPanelRight, wallBaseY, fenceTopY, width + 150, wallBaseY + angleOffset, fenceTopY - angleOffset);
+  // Draw 5 fence segments forming octagon shape
+  // Back wall (center)
+  drawFenceSegment(octPoints.backLeft.x, octPoints.backLeft.y, octPoints.backLeft.topY, 
+                   octPoints.backRight.x, octPoints.backRight.y, octPoints.backRight.topY);
+  // Back-left angled
+  drawFenceSegment(octPoints.cornerLeft.x, octPoints.cornerLeft.y, octPoints.cornerLeft.topY,
+                   octPoints.backLeft.x, octPoints.backLeft.y, octPoints.backLeft.topY);
+  // Back-right angled
+  drawFenceSegment(octPoints.backRight.x, octPoints.backRight.y, octPoints.backRight.topY,
+                   octPoints.cornerRight.x, octPoints.cornerRight.y, octPoints.cornerRight.topY);
+  // Left side
+  drawFenceSegment(octPoints.sideLeft.x, octPoints.sideLeft.y, octPoints.sideLeft.topY,
+                   octPoints.cornerLeft.x, octPoints.cornerLeft.y, octPoints.cornerLeft.topY);
+  // Right side
+  drawFenceSegment(octPoints.cornerRight.x, octPoints.cornerRight.y, octPoints.cornerRight.topY,
+                   octPoints.sideRight.x, octPoints.sideRight.y, octPoints.sideRight.topY);
 
+  // Draw posts at corners
   const drawPost = (x: number, y_base: number, h: number) => {
-      ctx.fillStyle = '#050505'; ctx.fillRect(x - 12, y_base - h - 12, 24, h + 24);
-      ctx.fillStyle = '#222'; ctx.fillRect(x - 8, y_base - h - 12, 6, h + 24);
-      ctx.fillStyle = '#ef4444'; ctx.fillRect(x - 12, y_base - h + 40, 24, 15);
+      ctx.fillStyle = '#050505'; ctx.fillRect(x - 10, y_base - h - 10, 20, h + 20);
+      ctx.fillStyle = '#222'; ctx.fillRect(x - 6, y_base - h - 10, 5, h + 20);
+      ctx.fillStyle = '#ef4444'; ctx.fillRect(x - 10, y_base - h + 30, 20, 12);
   };
-  drawPost(centerPanelLeft, wallBaseY, fenceHeight);
-  drawPost(centerPanelRight, wallBaseY, fenceHeight);
+  drawPost(octPoints.backLeft.x, octPoints.backLeft.y, fenceHeight);
+  drawPost(octPoints.backRight.x, octPoints.backRight.y, fenceHeight);
+  drawPost(octPoints.cornerLeft.x, octPoints.cornerLeft.y, fenceHeight + 60);
+  drawPost(octPoints.cornerRight.x, octPoints.cornerRight.y, fenceHeight + 60);
+  drawPost(octPoints.sideLeft.x, octPoints.sideLeft.y, fenceHeight + 160);
+  drawPost(octPoints.sideRight.x, octPoints.sideRight.y, fenceHeight + 160);
 
-  ctx.fillStyle = '#e4e4e7'; 
-  ctx.beginPath(); ctx.moveTo(0, wallBaseY + angleOffset); ctx.lineTo(centerPanelLeft, wallBaseY); ctx.lineTo(centerPanelRight, wallBaseY); 
-  ctx.lineTo(width, wallBaseY + angleOffset); ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.closePath(); ctx.fill();
+  // Floor mat - octagon shape with perspective
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.moveTo(octPoints.backLeft.x, octPoints.backLeft.y);
+  ctx.lineTo(octPoints.backRight.x, octPoints.backRight.y);
+  ctx.lineTo(octPoints.cornerRight.x, octPoints.cornerRight.y);
+  ctx.lineTo(octPoints.sideRight.x, octPoints.sideRight.y);
+  ctx.lineTo(octPoints.frontRight.x, octPoints.frontRight.y);
+  ctx.lineTo(octPoints.frontLeft.x, octPoints.frontLeft.y);
+  ctx.lineTo(octPoints.sideLeft.x, octPoints.sideLeft.y);
+  ctx.lineTo(octPoints.cornerLeft.x, octPoints.cornerLeft.y);
+  ctx.closePath();
+  ctx.fill();
 
-  ctx.save(); ctx.translate(centerX, wallBaseY + 60); ctx.scale(1, 0.3);
-  ctx.strokeStyle = '#18181b'; ctx.lineWidth = 10; ctx.beginPath();
-  const octSize = 400;
-  for (let i = 0; i < 8; i++) {
-      const angle = (i * Math.PI) / 4 + Math.PI / 8;
-      const ox = Math.cos(angle) * octSize; const oy = Math.sin(angle) * octSize;
-      if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
-  }
-  ctx.closePath(); ctx.stroke();
+  // Center logo on floor
+  ctx.save(); ctx.translate(centerX, wallBaseY + 50); ctx.scale(1, 0.4);
   
-  ctx.fillStyle = '#09090b'; ctx.beginPath(); ctx.arc(0, 0, 160, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffffff'; const px = 12; let startX = -84; let startY = -90;
+  // Center circle (dark with logo) - bigger
+  ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(0, 0, 120, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+  
+  // RKENA logo - cream color like the brand - bigger
+  const cream = '#e8e4d9';
+  const px = 7; 
+  
+  // First row: RKE
+  let startX = -52; let startY = -65;
+  ctx.fillStyle = cream;
   // R
   ctx.fillRect(startX, startY, px, px * 7); ctx.fillRect(startX, startY, px * 4, px); ctx.fillRect(startX, startY + px * 3, px * 4, px);
   ctx.fillRect(startX + px * 3, startY, px, px * 3); ctx.fillRect(startX + px * 2, startY + px * 4, px, px); ctx.fillRect(startX + px * 3, startY + px * 5, px, px * 2);
@@ -394,23 +451,28 @@ export const drawBackground = (ctx: CanvasRenderingContext2D, width: number, hei
   startX += px * 5; 
   // E
   ctx.fillRect(startX, startY, px, px * 7); ctx.fillRect(startX, startY, px * 4, px); ctx.fillRect(startX, startY + px * 3, px * 3, px); ctx.fillRect(startX, startY + px * 6, px * 4, px);
-  startX = -78; startY = 10;
+  
+  // Second row: NA + red square
+  startX = -52; startY = 10;
   // N
   ctx.fillRect(startX, startY, px, px * 7); ctx.fillRect(startX + px * 4, startY, px, px * 7);
   ctx.fillRect(startX + px, startY + px, px, px * 2); ctx.fillRect(startX + px * 2, startY + px * 3, px, px * 2); ctx.fillRect(startX + px * 3, startY + px * 5, px, px);
-  startX += px * 5; 
+  startX += px * 6; 
   // A
   ctx.fillRect(startX, startY + px, px, px * 6); ctx.fillRect(startX + px * 3, startY + px, px, px * 6);
   ctx.fillRect(startX + px, startY, px * 2, px); ctx.fillRect(startX, startY + px * 3, px * 4, px);
   startX += px * 5; 
-  ctx.fillStyle = '#dc2626'; ctx.fillRect(startX, startY + px * 2, px * 3, px * 5);
+  // Red square
+  ctx.fillStyle = '#dc2626'; ctx.fillRect(startX, startY + px * 3, px * 3, px * 4);
   ctx.restore();
 
   const drawFloorSponsor = (tx: number, ty: number) => {
-    ctx.save(); ctx.translate(tx, ty); ctx.scale(1, 0.3);
-    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.font = '20px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('any', 0, 4);
-    ctx.fillStyle = '#111111'; ctx.textAlign = 'left'; ctx.fillText('.ge', 35, 4);
+    ctx.save(); ctx.translate(tx, ty); ctx.scale(1, 0.5);
+    // Red circle with "any" text
+    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.font = '18px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('any', 0, 2);
+    // White "any.ge" text below
+    ctx.fillStyle = '#ffffff'; ctx.font = '12px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText('any.ge', 0, 70);
     ctx.restore();
   };
   drawFloorSponsor(width * 0.15, wallBaseY + 50);

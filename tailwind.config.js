@@ -10,7 +10,11 @@ export default {
         "./types.ts"
     ],
     theme: {
-        extend: {},
+        extend: {
+            screens: {
+                'landscape': { 'raw': '(orientation: landscape) and (max-height: 500px)' },
+            },
+        },
     },
     plugins: [],
 }

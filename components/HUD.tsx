@@ -31,14 +31,14 @@ const HUD: React.FC = () => {
   };
 
   return (
-    <div className="absolute top-4 left-0 w-full px-2 md:px-6 flex justify-center items-start pointer-events-none z-20 font-sans">
+    <div className="absolute top-4 left-0 w-full px-2 md:px-6 flex justify-center items-start pointer-events-none z-20" style={{ fontFamily: '"Press Start 2P", monospace' }}>
       <div className="flex w-full max-w-5xl items-stretch h-auto relative filter drop-shadow-lg">
         
         {/* LEFT SIDE (Player 1) */}
         <div className="flex-1 flex flex-col items-end relative mr-[-20px] z-10">
           {/* Skewed Name Bar */}
           <div className="w-full h-8 md:h-12 bg-[#d10d25] transform -skew-x-[20deg] flex items-center justify-end pr-8 pl-4 border-r-4 border-black/20">
-            <h2 className="text-white text-sm md:text-xl font-black uppercase tracking-tighter transform skew-x-[20deg] truncate">
+            <h2 className="text-white text-[6px] md:text-[10px] uppercase transform skew-x-[20deg] truncate">
               MERAB SHARIKADZE
             </h2>
           </div>
@@ -69,18 +69,18 @@ const HUD: React.FC = () => {
                
                {/* RKENA LOGO */}
                <div className="flex items-center gap-1 transform skew-x-[20deg]">
-                  <span className="font-black text-lg md:text-3xl tracking-tighter">RKENA</span>
-                  <div className="w-2 h-2 md:w-4 md:h-4 bg-[#d10d25]"></div>
+                  <span className="text-[10px] md:text-base">RKENA</span>
+                  <div className="w-2 h-2 md:w-3 md:h-3 bg-[#d10d25]"></div>
                </div>
 
                {/* TIMER */}
-               <div className="font-mono font-bold text-lg md:text-3xl tracking-widest transform skew-x-[20deg]">
+               <div className="text-[10px] md:text-sm transform skew-x-[20deg]">
                   {formatTime(time)}
                </div>
 
                {/* ROUND INDICATOR */}
-               <div className="bg-[#d10d25] px-2 py-0.5 md:py-1 transform skew-x-[0deg] ml-2">
-                  <span className="font-bold text-xs md:text-lg transform skew-x-[20deg] block">R1</span>
+               <div className="bg-[#d10d25] px-1.5 py-0.5 transform skew-x-[0deg] ml-1">
+                  <span className="text-[8px] md:text-xs transform skew-x-[20deg] block">R1</span>
                </div>
            </div>
         </div>
@@ -89,7 +89,7 @@ const HUD: React.FC = () => {
         <div className="flex-1 flex flex-col items-start relative ml-[-20px] z-10">
           {/* Skewed Name Bar */}
           <div className="w-full h-8 md:h-12 bg-[#d10d25] transform -skew-x-[20deg] flex items-center justify-start pl-8 pr-4 border-l-4 border-black/20">
-             <h2 className="text-white text-sm md:text-xl font-black uppercase tracking-tighter transform skew-x-[20deg] truncate">
+             <h2 className="text-white text-[6px] md:text-[10px] uppercase transform skew-x-[20deg] truncate">
                JON JONES BOT
              </h2>
           </div>
