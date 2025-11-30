@@ -5,7 +5,7 @@ import {
 } from '../types';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_Y, FIGHTER_WIDTH, FIGHTER_HEIGHT,
-  MOVE_SPEED, HIT_STUN_FRAMES, SLAMMED_FRAMES, PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SPRAWL_FRAMES,
+  MOVE_SPEED, HIT_STUN_FRAMES, SLAMMED_FRAMES, PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SPRAWL_FRAMES, BLOCK_COOLDOWN,
   DAMAGE_PUNCH, DAMAGE_KICK, DAMAGE_TAKEDOWN,
   STAMINA_COST_PUNCH, STAMINA_COST_KICK, STAMINA_COST_TAKEDOWN, STAMINA_REGEN,
   COLOR_SKIN_P1, COLOR_SHORTS_P1, COLOR_SKIN_P2, COLOR_SHORTS_P2
@@ -45,7 +45,9 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
     player: createFighter(150, true),
     enemy: createFighter(550, false),
     particles: [] as Particle[],
-    isGameOver: false
+    isGameOver: false,
+    timeRemaining: 180, // 3 minutes round
+    lastTimeUpdate: Date.now()
   });
 
   const checkCollision = (r1: Rect, r2: Rect) => {
@@ -110,8 +112,9 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         f.state = ActionState.IDLE;
       }
     } else if (f.state === ActionState.TAKEDOWN) {
-        // Lunge forward during the middle phase of the animation
-        if (f.stateTimer > 10 && f.stateTimer < 25) {
+        // Lunge forward during the "SHOOT" phase of the animation (20% to 70% progress)
+        // With TAKEDOWN_FRAMES=50, this is roughly frames 40 down to 15.
+        if (f.stateTimer > 15 && f.stateTimer <= 40) {
              f.x += f.direction * MOVE_SPEED * 1.5;
              // Update hitbox position to follow the lunge
              if (f.hitbox) {
@@ -157,7 +160,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         };
       } else if (controls.block) {
         f.state = ActionState.BLOCK;
-        f.stateTimer = 20; 
+        f.stateTimer = BLOCK_COOLDOWN; 
       }
     }
 
@@ -231,6 +234,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
 
   const checkCombatCollisions = (attacker: Fighter, defender: Fighter) => {
      // Allow collision detection to run throughout the active phase of the takedown
+     // Longer window for slower gameplay (frames 15 to 45 roughly)
      if (attacker.hitbox && (attacker.stateTimer > 5 || attacker.state === ActionState.TAKEDOWN) && defender.state !== ActionState.HIT && defender.state !== ActionState.SLAMMED && defender.state !== ActionState.KO) {
        const defenderHurtbox = { x: defender.x, y: defender.y, w: defender.width, h: defender.height };
        
@@ -296,12 +300,22 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
     checkCombatCollisions(player, enemy);
     checkCombatCollisions(enemy, player);
 
+    // Update Timer (roughly every second)
+    const now = Date.now();
+    if (now - gameState.current.lastTimeUpdate > 1000 && !gameState.current.isGameOver) {
+        if (gameState.current.timeRemaining > 0) {
+            gameState.current.timeRemaining--;
+        }
+        gameState.current.lastTimeUpdate = now;
+    }
+
     if (player.health <= 0 && player.state !== ActionState.KO) {
       player.state = ActionState.KO;
       player.health = 0;
       if (!gameState.current.isGameOver) {
         gameState.current.isGameOver = true;
-        setTimeout(() => onGameOver('ENEMY'), 1000);
+        // Delayed KO screen (3 seconds) to see animation
+        setTimeout(() => onGameOver('ENEMY'), 3000);
       }
     }
     if (enemy.health <= 0 && enemy.state !== ActionState.KO) {
@@ -309,7 +323,8 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
       enemy.health = 0;
       if (!gameState.current.isGameOver) {
         gameState.current.isGameOver = true;
-        setTimeout(() => onGameOver('PLAYER'), 1000);
+        // Delayed KO screen (3 seconds) to see animation
+        setTimeout(() => onGameOver('PLAYER'), 3000);
       }
     }
 
@@ -323,7 +338,13 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
 
     updateParticles(ctx);
 
-    const event = new CustomEvent('game-update', { detail: { p1: player, p2: enemy } });
+    const event = new CustomEvent('game-update', { 
+        detail: { 
+            p1: player, 
+            p2: enemy,
+            time: gameState.current.timeRemaining
+        } 
+    });
     window.dispatchEvent(event);
 
     requestRef.current = requestAnimationFrame(gameLoop);

@@ -1,6 +1,8 @@
 
-
 import { Fighter, ActionState } from '../types';
+import { 
+  PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SLAMMED_FRAMES, HIT_STUN_FRAMES 
+} from '../constants';
 
 export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => {
   const { x, y, width, height, color, shortsColor, direction, state, stateTimer, isPlayer } = fighter;
@@ -9,333 +11,406 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
   ctx.save();
   ctx.translate(x + width / 2, y + height);
   
-  // Draw Shadow
+  // Draw Shadow (Dynamic scale based on height)
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.beginPath();
-  ctx.ellipse(0, -5, width * 0.6, height * 0.05, 0, 0, Math.PI * 2);
+  const shadowScale = state === ActionState.SLAMMED || state === ActionState.TAKEDOWN ? 0.8 : 1;
+  ctx.ellipse(0, -5, width * 0.6 * shadowScale, height * 0.05, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.scale(direction, 1);
   
-  // Shake effect on hit
+  // Shake effect on hit (Horizontal vibration)
   if (state === ActionState.HIT) {
-    ctx.translate((Math.random() - 0.5) * 10, 0);
+    ctx.translate((Math.random() - 0.5) * 8, 0);
   }
 
   // Dimensions relative to size
   const w = width;
   const h = height;
   const headSize = w * 0.55;
-  const limbWidth = w * 0.32; // Slightly thicker limbs
+  const limbWidth = w * 0.32; 
   const torsoWidth = w * 0.9;
   
-  // Calculate animation offsets based on state
-  let armOffset = 0;
-  let legOffset = 0;
-  let bodyY = -h;
-  let bodyLean = 0;
-  let bodyHeightScale = 1;
-
-  // Animation Logic
+  // Animation State Variables
   const time = Date.now();
+  let bodyY = -h; // Base Y position
+  let bodyLean = 0; // Rotation in radians
+  
+  // Limb Rotations (Base poses)
+  let frontArmRot = -0.5;
+  let backArmRot = 0.5;
+  let frontLegRot = 0;
+  let backLegRot = 0;
+  
+  // Extension variables
+  let frontArmExt = 0;
+  let headOffsetY = 0;
+  let headOffsetX = 0;
+
+  // --- ANIMATION LOGIC ---
+
   if (state === ActionState.IDLE) {
-    bodyY += Math.sin(time / 200) * (h * 0.02); // Breathing
-    armOffset = Math.sin(time / 200 + Math.PI) * 5;
+    // Rhythmic Fighter Bounce (Slower)
+    const bounceSpeed = 600;
+    const bounce = Math.sin(time / bounceSpeed);
+    
+    bodyY += bounce * (h * 0.015); // Subtle bob
+    bodyLean = 0.05 + Math.sin(time / 800) * 0.02; // Slight sway
+    
+    // Arms float slightly
+    frontArmRot = -0.5 + bounce * 0.05;
+    backArmRot = 0.8 + bounce * 0.05;
+
   } else if (state === ActionState.WALK) {
-    const walkCycle = Math.sin(time / 80);
-    legOffset = walkCycle * (w * 0.2);
-    bodyY += Math.abs(Math.sin(time / 80)) * (h * 0.03);
-    armOffset = -walkCycle * 10;
-  } else if (state === ActionState.PUNCH) {
-    const progress = 1 - (stateTimer / 20); // Normalized 0 to 1
-    if (progress < 0.2) armOffset = -w * 0.2; // Windup
-    else if (progress < 0.5) armOffset = w * 0.8; // Extension
-    else armOffset = 0; // Return
-    bodyLean = 0.15;
-  } else if (state === ActionState.KICK) {
-    const progress = 1 - (stateTimer / 30);
-    bodyLean = -0.3;
-    if (progress < 0.5) legOffset = w * 0.6;
+    // Biomechanical Walk Cycle (Slower)
+    const walkSpeed = 250;
+    const walkCycle = (time / walkSpeed); 
+    
+    // Legs move in sine wave
+    const strideSize = 0.6;
+    frontLegRot = Math.sin(walkCycle) * strideSize;
+    backLegRot = Math.sin(walkCycle + Math.PI) * strideSize; // Opposite phase
+    
+    // Body double-bobs (down when legs spread, up when crossing)
+    bodyY += Math.abs(Math.sin(walkCycle)) * (h * 0.03); 
+    bodyLean = 0.1; // Lean into walk
+
+    // Arms swing opposite to legs
+    frontArmRot = -0.5 + Math.sin(walkCycle + Math.PI) * 0.4; 
+    backArmRot = 0.5 + Math.sin(walkCycle) * 0.4;
+
   } else if (state === ActionState.BLOCK) {
-    armOffset = -w * 0.1;
-    bodyLean = -0.1;
-  } else if (state === ActionState.KO) {
-    bodyLean = -1.57; // 90 degrees flat
-    bodyY = -h * 0.1;
+    // Turtle Up (Slower breathing)
+    const breath = Math.sin(time / 250) * 0.02;
+    bodyY += h * 0.05; // Crouch down
+    bodyLean = -0.2 + breath; // Hunch forward
+    
+    // Hands high to cover face
+    frontArmRot = -2.2 + breath; 
+    backArmRot = -2.4 + breath; 
+    headOffsetY = 2; // Tuck chin
+
+  } else if (state === ActionState.PUNCH) {
+    const progress = 1 - (stateTimer / PUNCH_FRAMES); // 0 to 1
+    
+    if (progress < 0.2) {
+       // Windup
+       frontArmRot = -0.2;
+       bodyLean = -0.1;
+    } else if (progress < 0.5) {
+       // Snap
+       frontArmRot = -1.57; // Straight out
+       frontArmExt = w * 0.9;
+       bodyLean = 0.2; // Lean in
+    } else {
+       // Retract
+       frontArmRot = -1.0;
+       frontArmExt = w * 0.2;
+    }
+    backArmRot = 0.8; // Guard face with other hand
+
+  } else if (state === ActionState.KICK) {
+    const progress = 1 - (stateTimer / KICK_FRAMES);
+    bodyLean = -0.4; // Lean back to counterbalance
+    
+    if (progress < 0.3) {
+        // Chamber knee
+        frontLegRot = -1.0;
+        backLegRot = 0.2;
+    } else if (progress < 0.6) {
+        // Extension
+        frontLegRot = -1.9; // High!
+    } else {
+        // Retract
+        frontLegRot = 0;
+    }
+    // Arms for balance
+    frontArmRot = 0.5;
+    backArmRot = -1.5;
+
+  } else if (state === ActionState.HIT) {
+    // Whiplash effect
+    const impact = stateTimer / HIT_STUN_FRAMES; // 1.0 down to 0
+    
+    // Snap torso back
+    bodyLean = -0.4 * impact; 
+    
+    // Head lags behind torso (Whiplash)
+    headOffsetX = -5 * impact;
+    headOffsetY = 2 * impact;
+    
+    // Arms flail out
+    frontArmRot = -1.0 - (impact * 0.5);
+    backArmRot = -0.5 - (impact * 0.5);
+
   } else if (state === ActionState.TAKEDOWN) {
-    // Dynamic Animation: Crouch -> Shoot -> Hold -> Recover
-    // Timer starts at 30
-    if (stateTimer > 25) {
-        // Wind up / Crouch
+    // Crouch -> Shoot -> Drive -> Recover
+    
+    const t = stateTimer;
+    
+    if (t > TAKEDOWN_FRAMES * 0.8) {
+        // Level change (Crouch)
         bodyLean = 0.4;
-        bodyY = -h * 0.8;
-    } else if (stateTimer > 10) {
-        // SHOOT!
-        bodyLean = 1.3; // Very low
+        bodyY = -h * 0.6;
+        frontArmRot = -1.0;
+    } else if (t > TAKEDOWN_FRAMES * 0.3) {
+        // SHOOT (Drive forward)
+        bodyLean = 1.3; // Horizontal
         bodyY = -h * 0.4;
-        armOffset = w * 0.8; // Arms full reach
+        frontArmRot = -1.8; // Reaching
+        backArmRot = -1.8;
+        frontArmExt = w * 0.5;
+        backLegRot = -1.0; // Driving leg
+        frontLegRot = -1.5; // Knee slide
     } else {
         // Recovery
         bodyLean = 0.6;
         bodyY = -h * 0.7;
     }
+
   } else if (state === ActionState.SPRAWL) {
-    bodyLean = 1.4; // Almost flat forward
-    bodyY = -h * 0.25;
-    // Legs kick back visually handled by rotation
-    legOffset = -w * 0.5;
+    // Hips heavy
+    bodyLean = 1.4; // Flat
+    bodyY = -h * 0.25; // Low
+    frontLegRot = 1.5; // Kicked back
+    backLegRot = 1.5; // Kicked back
+    frontArmRot = -0.5; // Post on ground
+    backArmRot = -0.5;
+
   } else if (state === ActionState.SLAMMED) {
+    // SLAMMED_FRAMES ~ 80
     bodyLean = -1.6; // Flat on back
-    // Bounce animation
-    // Timer starts at 45. 
-    // 45-35: Being slammed down
-    // 35-25: Bounce up slightly
-    // 25-0: Flat
-    if (stateTimer > 35) {
-        bodyY = -h * 0.5 + (45 - stateTimer) * 10; // Falling fast
-    } else if (stateTimer > 25) {
-        bodyY = -h * 0.2 - (35 - stateTimer) * 3; // Bounce up
+    const t = stateTimer;
+    const max = SLAMMED_FRAMES;
+    
+    // Physics bounce logic
+    if (t > max * 0.5) {
+        // Fall
+        bodyY = -h * 0.5 + (max - t) * 6; 
+        frontLegRot = -0.5; backLegRot = -0.8; // Legs up
+        frontArmRot = -2.5; // Arms flailing
+    } else if (t > max * 0.3) {
+        // Bounce
+        bodyY = -h * 0.2 - (max * 0.4 - t) * 2; 
+        frontLegRot = 0; backLegRot = 0;
     } else {
-        bodyY = -h * 0.1; // Rest on ground
+        // Rest
+        bodyY = -h * 0.1; 
+        frontLegRot = 0.1; backLegRot = 0.1;
+        frontArmRot = -2.8; // On floor
     }
+  } else if (state === ActionState.KO) {
+    bodyLean = -1.57; // 90 Degrees horizontal (Flat)
+    bodyY = -h * 0.12; // Shifted slightly to align pivot
+    
+    // KO Specific Limb Adjustments to ensure connection
+    frontArmRot = -2.8; // Flop back
+    backArmRot = -2.8;
+    frontLegRot = 0.1;
+    backLegRot = 0.1;
+    headOffsetY = 5; // Tucked closer to torso to close neck gap
   }
 
+  // --- RENDERING ---
+  
+  // Apply Body Rotation
   ctx.rotate(bodyLean);
 
-  // --- DRAWING ORDER: Back Arm -> Back Leg -> Body -> Head -> Front Leg -> Front Arm ---
-
-  // 1. Back Arm (Farthest Layer - Behind body)
-  ctx.fillStyle = color;
-  let backArmRot = state === ActionState.BLOCK ? -2.5 : 0.5; // Guard position or idle
-  if (state === ActionState.PUNCH) backArmRot = 0.8; // Tucked
-  if (state === ActionState.WALK) backArmRot += armOffset / 20;
-  if (state === ActionState.TAKEDOWN) {
-      if (stateTimer > 10 && stateTimer <= 25) backArmRot = -1.8; // Reaching forward
-      else backArmRot = -0.5;
-  }
-  if (state === ActionState.SPRAWL) backArmRot = -0.5; // Stabilizing on ground
-  if (state === ActionState.SLAMMED) backArmRot = -2.5; // Arms flailing up
-
+  // 1. Back Arm (Behind body)
   ctx.save();
-  ctx.translate(torsoWidth * 0.2, -h * 0.75); // Shoulder pivot
+  ctx.translate(torsoWidth * 0.2, -h * 0.75); // Shoulder
   ctx.rotate(backArmRot);
-  ctx.fillRect(-limbWidth/2, 0, limbWidth, h * 0.35); // Arm
+  ctx.fillStyle = color;
+  ctx.fillRect(-limbWidth/2, 0, limbWidth, h * 0.35); 
   // Glove
   ctx.fillStyle = '#cc0000'; 
   ctx.fillRect(-limbWidth/2 - 2, h * 0.35, limbWidth + 4, limbWidth + 4);
   ctx.restore();
 
-  // 2. Back Leg
-  const backLegX = -torsoWidth * 0.25;
-  let backLegRot = 0;
-  if (state === ActionState.WALK) backLegRot = -legOffset / 20;
-  if (state === ActionState.SPRAWL) backLegRot = 1.5; // Legs kicked back
-  if (state === ActionState.SLAMMED) backLegRot = -0.2; // Slightly bent on ground
-  if (state === ActionState.TAKEDOWN) {
-      if (stateTimer > 10 && stateTimer <= 25) backLegRot = -1.2; // Driving leg
-      else backLegRot = -0.5;
-  }
-  
+  // 2. Back Leg (Behind body)
   ctx.save();
-  ctx.translate(backLegX, -h * 0.5);
+  ctx.translate(-torsoWidth * 0.25, -h * 0.5); // Hip
   ctx.rotate(backLegRot);
-  // Skin
   ctx.fillStyle = color; 
   ctx.fillRect(-limbWidth/2, 0, limbWidth, h * 0.5); 
-  // Shorts Sleeve (Back)
+  // Shorts Sleeve
   ctx.fillStyle = shortsColor;
   ctx.fillRect(-limbWidth/2 - 2, -5, limbWidth + 4, h * 0.25);
-  ctx.restore();
-
-  // 3. Torso (Body + Waistband)
-  ctx.fillStyle = color;
-  ctx.fillRect(-torsoWidth/2, bodyY + h*0.2, torsoWidth, h * 0.45); // Chest/Abdomen
-
-  // TATTOO: Philippians (Opponent Only)
-  if (!isPlayer) {
-    ctx.save();
-    ctx.translate(torsoWidth * 0.1, bodyY + h * 0.35); // Upper chest area
-    ctx.rotate(-0.1);
-    ctx.fillStyle = 'rgba(20, 10, 10, 0.7)'; // Dark ink color
-    
-    // Mimic "Philippians 4:13" text shape
-    ctx.fillRect(-25, -5, 50, 4); // Main text block
-    ctx.fillRect(-15, 2, 30, 3); // Secondary line
-    
-    ctx.restore();
-  }
-
-  // Shorts Waistband (Static on body)
-  ctx.fillStyle = shortsColor;
-  ctx.fillRect(-torsoWidth/2 - 2, bodyY + h*0.45, torsoWidth + 4, h * 0.18);
-  
-  // Shorts Detail
+  // Borjgali Symbol (Player Only - Back Leg)
   if (isPlayer) {
-      // BORJGALI SYMBOL (Georgian Sun) - Placed on the Rear Side of Shorts (Torso Layer)
-      const bx = -torsoWidth * 0.3; // Rear/Left side
-      const by = bodyY + h * 0.55; // Upper position of fighters bottom (shorts area)
-      const bs = 3; // base scale
-      
+      ctx.save();
+      const bx = 0; 
+      const by = h * 0.12; 
+      const bs = 3; 
       ctx.fillStyle = '#ffffff';
-      
-      // Central point
       ctx.beginPath();
       ctx.arc(bx, by, bs, 0, Math.PI * 2);
       ctx.fill();
-
-      // 7 Wings (Swirling pattern)
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       for(let i=0; i<7; i++) {
         const angle = (i * Math.PI * 2) / 7;
         const armLen = bs * 3;
-        // Curve point
         const cx = bx + Math.cos(angle) * armLen;
         const cy = by + Math.sin(angle) * armLen;
-        // Tip (curved)
         const tx = bx + Math.cos(angle + 0.5) * (armLen + 3);
         const ty = by + Math.sin(angle + 0.5) * (armLen + 3);
-        
         ctx.moveTo(bx, by);
         ctx.quadraticCurveTo(cx, cy, tx, ty);
       }
       ctx.stroke();
+      ctx.restore();
+  }
+  ctx.restore();
 
+  // 3. Torso
+  ctx.fillStyle = color;
+  ctx.fillRect(-torsoWidth/2, bodyY + h*0.2, torsoWidth, h * 0.45); 
+
+  // Opponent Tattoo (Philippians)
+  if (!isPlayer) {
+    ctx.save();
+    ctx.translate(torsoWidth * 0.1, bodyY + h * 0.35); 
+    ctx.rotate(-0.1);
+    ctx.fillStyle = 'rgba(20, 10, 10, 0.7)'; 
+    ctx.fillRect(-25, -5, 50, 4); 
+    ctx.fillRect(-15, 2, 30, 3); 
+    ctx.restore();
+  }
+
+  // Shorts Waistband
+  ctx.fillStyle = shortsColor;
+  // INCREASED HEIGHT to h * 0.3 to fully cover torso bottom (safer than 0.28)
+  ctx.fillRect(-torsoWidth/2 - 2, bodyY + h*0.45, torsoWidth + 4, h * 0.3);
+  
+  // Borjgali on Torso/Shorts Rear (Player)
+  if (isPlayer) {
+      const bx = -torsoWidth * 0.3; 
+      const by = bodyY + h * 0.55; 
+      const bs = 3; 
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(bx, by, bs, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.beginPath();
+      for(let i=0; i<7; i++) {
+        const angle = (i * Math.PI * 2) / 7;
+        const armLen = bs * 3;
+        const cx = bx + Math.cos(angle) * armLen;
+        const cy = by + Math.sin(angle) * armLen;
+        const tx = bx + Math.cos(angle + 0.5) * (armLen + 3);
+        const ty = by + Math.sin(angle + 0.5) * (armLen + 3);
+        ctx.moveTo(bx, by); ctx.quadraticCurveTo(cx, cy, tx, ty);
+      }
+      ctx.stroke();
   } else {
-      // White UFC Logo/Trim for P2 (Jon Jones)
+      // P2 UFC Trim
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      // Center logo block on waistband
       ctx.fillRect(-10, bodyY + h*0.5, 20, 8);
   }
 
   // 4. Head
+  const neckH = h * 0.10; // Slightly longer neck base
   ctx.fillStyle = color;
-  const neckH = h * 0.08; 
-  ctx.fillRect(-headSize * 0.3, bodyY + h*0.15, headSize * 0.6, neckH); // Neck
-  ctx.fillRect(-headSize/2, bodyY + h*0.15 - headSize, headSize, headSize); // Head Base
+  // Neck moves with head offset
+  ctx.fillRect(-headSize * 0.3 + headOffsetX, bodyY + h*0.15 + headOffsetY, headSize * 0.6, neckH); 
   
-  const hairY = bodyY + h * 0.15 - headSize;
-
+  const headX = -headSize/2 + headOffsetX;
+  const headBaseY = bodyY + h*0.15 - headSize + headOffsetY;
+  
+  ctx.fillRect(headX, headBaseY, headSize, headSize); // Head Base
+  
   if (isPlayer) {
-      // PLAYER 1: Short Dark Hair + Lighter Brown Beard (Aleksandar Rakic / Merab style)
-      const hairColor = '#1a1a1a'; // Dark Black/Brown for head hair
-      const beardColor = '#6d4c41'; // Lighter Brown for beard
-      
-      // Beard (covers jawline and sides)
+      // P1: Merab Style
+      const hairColor = '#1a1a1a'; 
+      const beardColor = '#6d4c41'; 
       ctx.fillStyle = beardColor;
-      ctx.fillRect(-headSize/2, bodyY + h*0.15 - headSize * 0.45, headSize, headSize * 0.45);
-      // Beard Sideburns
-      ctx.fillRect(-headSize/2, bodyY + h*0.15 - headSize * 0.7, headSize * 0.25, headSize * 0.4);
-
-      // Hair (Short Crew Cut)
+      ctx.fillRect(headX, headBaseY + headSize * 0.55, headSize, headSize * 0.45);
+      ctx.fillRect(headX, headBaseY + headSize * 0.3, headSize * 0.25, headSize * 0.4);
       ctx.fillStyle = hairColor;
-      ctx.fillRect(-headSize/2, hairY - 5, headSize, 12); // Top
-      ctx.fillRect(-headSize/2, hairY, headSize * 0.2, headSize * 0.5); // Side connection
-      
-      // Face Features
+      ctx.fillRect(headX, headBaseY - 5, headSize, 12); 
+      ctx.fillRect(headX, headBaseY, headSize * 0.2, headSize * 0.5); 
       ctx.fillStyle = 'rgba(0,0,0,0.3)'; 
-      ctx.fillRect(headSize * 0.15, bodyY + h*0.15 - headSize * 0.65, headSize * 0.25, headSize * 0.1); // Eye
-      
-      // Mouth (Inside beard area, dark)
+      ctx.fillRect(headX + headSize * 0.65, headBaseY + headSize * 0.35, headSize * 0.25, headSize * 0.1); 
       ctx.fillStyle = '#3e2723';
-      ctx.fillRect(headSize * 0.2, bodyY + h*0.15 - headSize * 0.25, headSize * 0.3, headSize * 0.05);
+      ctx.fillRect(headX + headSize * 0.4, headBaseY + headSize * 0.75, headSize * 0.3, headSize * 0.05);
   } else {
-      // CPU: Jon Jones Model
-      
-      // Hair: Short Black Faded
+      // P2: Jon Jones Style
       ctx.fillStyle = '#0a0a0a'; 
-      ctx.fillRect(-headSize/2, hairY - 3, headSize, 10); // Very short top
-      ctx.fillRect(-headSize/2, hairY, headSize * 0.15, headSize * 0.4); // Fade side
-
-      // Beard: Black Goatee/Beard
+      ctx.fillRect(headX, headBaseY - 3, headSize, 10); 
+      ctx.fillRect(headX, headBaseY, headSize * 0.15, headSize * 0.4); 
       ctx.fillStyle = '#0a0a0a';
-      // Goatee area
-      ctx.fillRect(headSize * 0.1, bodyY + h*0.15 - headSize * 0.3, headSize * 0.4, headSize * 0.3);
-      // Jawline stubble
+      ctx.fillRect(headX + headSize * 0.6, headBaseY + headSize * 0.7, headSize * 0.4, headSize * 0.3);
       ctx.fillStyle = 'rgba(10,10,10,0.5)';
-      ctx.fillRect(-headSize/2, bodyY + h*0.15 - headSize * 0.2, headSize, headSize * 0.2);
-
-      // Face
-      ctx.fillStyle = 'rgba(0,0,0,0.4)'; // Darker eye shadow
-      ctx.fillRect(headSize * 0.15, bodyY + h*0.15 - headSize * 0.65, headSize * 0.25, headSize * 0.1); // Eye
-      
-      // Mouth
+      ctx.fillRect(headX, headBaseY + headSize * 0.8, headSize, headSize * 0.2);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; 
+      ctx.fillRect(headX + headSize * 0.65, headBaseY + headSize * 0.35, headSize * 0.25, headSize * 0.1); 
       ctx.fillStyle = '#2d1b15';
-      ctx.fillRect(headSize * 0.2, bodyY + h*0.15 - headSize * 0.2, headSize * 0.2, headSize * 0.05);
+      ctx.fillRect(headX + headSize * 0.4, headBaseY + headSize * 0.8, headSize * 0.2, headSize * 0.05);
   }
-
-  // 5. Front Leg
-  const frontLegX = torsoWidth * 0.25;
-  let frontLegRot = 0;
   
-  if (state === ActionState.KICK && stateTimer > 0) {
-     frontLegRot = -1.8; // High kick
-  } else if (state === ActionState.WALK) {
-     frontLegRot = legOffset / 20;
-  } else if (state === ActionState.TAKEDOWN) {
-     if (stateTimer > 10 && stateTimer <= 25) frontLegRot = -1.5; // Deep lunge
-     else frontLegRot = -0.5;
-  } else if (state === ActionState.SPRAWL) {
-     frontLegRot = 1.5; // Kicked back
-  } else if (state === ActionState.SLAMMED) {
-     frontLegRot = 0.2; // Legs flopped
+  // KO FACE OVERLAY (X Eyes + Tongue)
+  if (state === ActionState.KO) {
+      // Eyes "X"
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      
+      // Left X
+      ctx.beginPath(); 
+      ctx.moveTo(headX + headSize*0.15, headBaseY + headSize*0.3); 
+      ctx.lineTo(headX + headSize*0.35, headBaseY + headSize*0.5); 
+      ctx.stroke();
+      ctx.beginPath(); 
+      ctx.moveTo(headX + headSize*0.35, headBaseY + headSize*0.3); 
+      ctx.lineTo(headX + headSize*0.15, headBaseY + headSize*0.5); 
+      ctx.stroke();
+
+      // Right X
+      ctx.beginPath(); 
+      ctx.moveTo(headX + headSize*0.65, headBaseY + headSize*0.3); 
+      ctx.lineTo(headX + headSize*0.85, headBaseY + headSize*0.5); 
+      ctx.stroke();
+      ctx.beginPath(); 
+      ctx.moveTo(headX + headSize*0.85, headBaseY + headSize*0.3); 
+      ctx.lineTo(headX + headSize*0.65, headBaseY + headSize*0.5); 
+      ctx.stroke();
+
+      // Tongue Hanging Out
+      ctx.fillStyle = '#ff9999'; // Pink
+      ctx.strokeStyle = '#cc0000';
+      ctx.lineWidth = 1;
+      // Draw protruding tongue
+      ctx.fillRect(headX + headSize*0.4, headBaseY + headSize*0.85, headSize*0.2, headSize*0.25);
+      ctx.strokeRect(headX + headSize*0.4, headBaseY + headSize*0.85, headSize*0.2, headSize*0.25);
   }
 
+  // 5. Front Leg (Hip Pivot)
   ctx.save();
-  ctx.translate(frontLegX, -h * 0.55); // Hip pivot
+  ctx.translate(torsoWidth * 0.25, -h * 0.55); 
   ctx.rotate(frontLegRot);
-  
-  // Skin
   ctx.fillStyle = color;
   ctx.fillRect(-limbWidth/2, 0, limbWidth, h * 0.55); 
-  
-  // Shorts Sleeve (Front - Rotates with leg!)
   ctx.fillStyle = shortsColor;
   ctx.fillRect(-limbWidth/2 - 2, -5, limbWidth + 4, h * 0.25);
-
   if (!isPlayer) {
-      // P2 (Jon Jones) Trim
       ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.fillRect(-limbWidth/2 - 2, h * 0.22, limbWidth + 4, 3); // Bottom hem
+      ctx.fillRect(-limbWidth/2 - 2, h * 0.22, limbWidth + 4, 3);
   }
-
-  // Foot (if kicking)
   if (state === ActionState.KICK) {
       ctx.fillStyle = color;
-      ctx.fillRect(-limbWidth/2, h*0.55, limbWidth * 2, limbWidth);
+      ctx.fillRect(-limbWidth/2, h*0.55, limbWidth * 2, limbWidth); // Foot
   }
   ctx.restore();
 
-  // 6. Front Arm
-  ctx.fillStyle = color;
-  let frontArmRot = state === ActionState.BLOCK ? -2.2 : -0.5; // Guard or idle
-  let frontArmLen = h * 0.35;
-  let gloveX = -limbWidth/2 - 2;
-  let gloveY = frontArmLen;
-
-  if (state === ActionState.PUNCH) {
-      frontArmRot = -1.57; // Horizontal
-      frontArmLen += armOffset; // Extend
-  } else if (state === ActionState.WALK) {
-      frontArmRot += armOffset / 20;
-  } else if (state === ActionState.TAKEDOWN) {
-      if (stateTimer > 10 && stateTimer <= 25) frontArmRot = -1.8; // Reaching
-      else frontArmRot = -0.5;
-      frontArmLen += 15;
-  } else if (state === ActionState.SPRAWL) {
-      frontArmRot = -0.5;
-  } else if (state === ActionState.SLAMMED) {
-      frontArmRot = -2.5; // Flailing
-  }
-
+  // 6. Front Arm (Shoulder Pivot)
+  let frontArmLen = h * 0.35 + frontArmExt;
   ctx.save();
-  ctx.translate(-torsoWidth * 0.2, -h * 0.75); // Shoulder pivot
+  ctx.translate(-torsoWidth * 0.2, -h * 0.75); 
   ctx.rotate(frontArmRot);
-  ctx.fillRect(-limbWidth/2, 0, limbWidth, frontArmLen); // Arm
-  // Glove
+  ctx.fillStyle = color;
+  ctx.fillRect(-limbWidth/2, 0, limbWidth, frontArmLen); 
   ctx.fillStyle = '#cc0000';
-  ctx.fillRect(gloveX, gloveY + (state === ActionState.PUNCH ? armOffset : 0), limbWidth + 4, limbWidth + 6);
+  ctx.fillRect(-limbWidth/2 - 2, frontArmLen, limbWidth + 4, limbWidth + 6);
   ctx.restore();
 
   ctx.restore();
@@ -435,25 +510,25 @@ export const drawBackground = (ctx: CanvasRenderingContext2D, width: number, hei
     ctx.save();
     ctx.translate(tx, ty);
     
-    // 1. Red Circle
+    // 1. Red Circle (Smooth High Quality)
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.arc(-30, 0, 24, 0, Math.PI * 2);
+    ctx.arc(-25, 0, 20, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. "any" Text (White, Sans-serif)
+    // 2. "any" Text (Smooth Standard Font)
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 18px Arial, sans-serif'; // Clean font
+    ctx.font = 'bold 16px Arial, Helvetica, sans-serif'; 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('any', -30, 2);
+    ctx.fillText('any', -25, 1);
 
-    // 3. ".ge" Text (White, Sans-serif)
+    // 3. ".ge" Text (Smooth Standard Font)
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px Arial, sans-serif';
+    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('.ge', 0, 2);
+    ctx.fillText('.ge', 0, 1); 
 
     ctx.restore();
   };
@@ -570,7 +645,7 @@ export const drawBackground = (ctx: CanvasRenderingContext2D, width: number, hei
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(centerX - 65, fenceBannerY - 26, 130, 60);
 
-  // Banner background - Black (matches provided image)
+  // Banner background - Black
   ctx.fillStyle = '#000000'; 
   ctx.fillRect(centerX - 70, fenceBannerY - 30, 140, 60); 
   

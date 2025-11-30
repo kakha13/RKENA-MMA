@@ -4,7 +4,7 @@ import GameCanvas from './components/GameCanvas';
 import HUD from './components/HUD';
 import Controls from './components/Controls';
 import { GameState, InputState } from './types';
-import { Trophy, Skull, MonitorPlay, Maximize, Minimize } from 'lucide-react';
+import { Trophy, MonitorPlay, Maximize, Minimize } from 'lucide-react';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
@@ -96,7 +96,7 @@ const App: React.FC = () => {
         {/* Menu Screen */}
         {gameState === GameState.MENU && (
           <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center text-center p-4 md:p-8">
-            <h1 className="text-4xl md:text-6xl font-bold text-red-600 mb-6 md:mb-8 tracking-tighter drop-shadow-[4px_4px_0_rgba(180,180,180,0.2)]">
+            <h1 className="text-4xl md:text-6xl font-bold text-[#d10d25] mb-6 md:mb-8 tracking-tighter drop-shadow-[4px_4px_0_rgba(180,180,180,0.2)]">
               RKENA MMA
               <br/>
               <span className="text-2xl md:text-3xl text-white">CHAMPIONSHIP</span>
@@ -119,13 +119,22 @@ const App: React.FC = () => {
 
             <button 
               onClick={startGame}
-              className="group relative px-8 py-4 bg-red-600 text-white font-bold text-xl uppercase tracking-widest hover:bg-red-500 transition-colors border-b-4 border-red-800 active:border-b-0 active:translate-y-1 touch-manipulation"
+              className="group relative px-8 py-4 bg-[#d10d25] text-white font-bold text-xl uppercase tracking-widest hover:brightness-110 transition-colors border-b-4 border-[#8a0918] active:border-b-0 active:translate-y-1 touch-manipulation"
             >
               <div className="flex items-center gap-2">
                 <MonitorPlay className="w-6 h-6" />
                 Fight!
               </div>
             </button>
+
+            <a 
+              href="https://www.kisa.ge/donate/63shrjr55q" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="mt-8 px-6 py-3 bg-yellow-400 text-black font-bold uppercase tracking-wider rounded shadow hover:bg-yellow-300 transition-colors active:scale-95 flex items-center gap-2"
+            >
+                <span>🎁</span> დონაცია
+            </a>
           </div>
         )}
 
@@ -135,19 +144,31 @@ const App: React.FC = () => {
             {gameState === GameState.VICTORY ? (
               <Trophy className="w-20 h-20 md:w-24 md:h-24 text-yellow-400 mb-4 animate-bounce" />
             ) : (
-              <Skull className="w-20 h-20 md:w-24 md:h-24 text-gray-500 mb-4" />
+              // Skull removed as requested
+              <div className="w-20 h-20 md:w-24 md:h-24 text-gray-500 mb-4 flex items-center justify-center border-4 border-gray-700 rounded-full">
+                  <span className="text-4xl font-black">KO</span>
+              </div>
             )}
             
             <h2 className={`text-4xl md:text-5xl font-bold mb-8 ${gameState === GameState.VICTORY ? 'text-green-500' : 'text-red-600'}`}>
-              {gameState === GameState.VICTORY ? 'YOU WIN!' : 'K.O.'}
+              {gameState === GameState.VICTORY ? 'YOU WIN!' : 'KNOCKOUT'}
             </h2>
 
             <button 
               onClick={startGame}
-              className="px-6 py-3 bg-white text-black font-bold text-lg uppercase tracking-wider hover:bg-gray-200 active:scale-95 transition-transform"
+              className="px-6 py-3 bg-[#d10d25] text-white font-bold text-lg uppercase tracking-wider hover:brightness-110 active:scale-95 transition-transform"
             >
               Rematch
             </button>
+
+            <a 
+              href="https://www.kisa.ge/donate/63shrjr55q" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="mt-6 px-6 py-3 bg-yellow-400 text-black font-bold uppercase tracking-wider rounded shadow hover:bg-yellow-300 transition-colors active:scale-95 flex items-center gap-2"
+            >
+                <span>🎁</span> დონაცია
+            </a>
           </div>
         )}
 
