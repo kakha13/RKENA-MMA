@@ -11,10 +11,12 @@ import {
   COLOR_SKIN_P1, COLOR_SHORTS_P1, COLOR_SKIN_P2, COLOR_SHORTS_P2
 } from '../constants';
 import { drawFighter, drawBackground } from '../utils/sprites';
+import { playHitSound, playBlockSound, playWhooshSound, playSlamSound, playTakedownSound, playKOSound } from '../utils/audio';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'PLAYER' | 'ENEMY') => void;
   input: InputState;
+  isMuted: boolean;
 }
 
 const createFighter = (x: number, isPlayer: boolean): Fighter => ({
@@ -36,7 +38,7 @@ const createFighter = (x: number, isPlayer: boolean): Fighter => ({
   hitbox: null
 });
 
-function GameCanvas({ onGameOver, input }: GameCanvasProps) {
+function GameCanvas({ onGameOver, input, isMuted }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   const frameRef = useRef({
@@ -56,7 +58,8 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
     aiMoveDirection: 0 as -1 | 0 | 1,  // -1 = left, 0 = idle, 1 = right
     aiMoveTimer: 0,  // frames remaining for current movement decision
     // Commentator shout system
-    commentatorShout: null as { text: string; timer: number; x: number } | null
+    commentatorShout: null as { text: string; timer: number; x: number } | null,
+    introShoutPlayed: false
   });
 
   const checkCollision = (r1: Rect, r2: Rect) => {
@@ -82,9 +85,9 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
     }
   };
 
-  const triggerCommentatorShout = (text: string) => {
+  const triggerCommentatorShout = (text: string, forceIndex?: number) => {
     // Random commentator (0, 1, or 2 - left, center, right)
-    const commentatorIndex = Math.floor(Math.random() * 3);
+    const commentatorIndex = forceIndex !== undefined ? forceIndex : Math.floor(Math.random() * 3);
     gameState.current.commentatorShout = {
       text,
       timer: 90, // Show for ~1.5 seconds
@@ -107,6 +110,8 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
       if (f.stateTimer <= 0) {
         if (f.state === ActionState.HIT || f.state === ActionState.SPRAWL || f.state === ActionState.SLAMMED) {
           f.state = ActionState.IDLE;
+          // Reset Y just in case
+          f.y = GROUND_Y - FIGHTER_HEIGHT;
         } else if (f.state === ActionState.PUNCH || f.state === ActionState.KICK || f.state === ActionState.BLOCK || f.state === ActionState.TAKEDOWN) {
           f.state = ActionState.IDLE;
           f.hitbox = null;
@@ -120,6 +125,24 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
       f.state === ActionState.SLAMMED;
 
     // Movement
+    // Explicitly block movement if slammed
+    if (f.state === ActionState.SLAMMED) {
+      f.vx = 0;
+      // Vertical Lift Animation
+      const max = SLAMMED_FRAMES;
+      const t = f.stateTimer;
+      const progress = 1 - (t / max);
+      
+      // Parabolic lift: Starts at 0, peaks at ~0.15, lands at ~0.3
+      if (progress < 0.3) {
+        const lift = Math.sin(progress / 0.3 * Math.PI) * 120;
+        f.y = (GROUND_Y - FIGHTER_HEIGHT) - lift;
+      } else {
+        f.y = GROUND_Y - FIGHTER_HEIGHT;
+      }
+      return; // Fully stop processing other logic for this fighter
+    }
+
     if (!isBusy) {
       // Slow down the bot (Jon Jones) to make him feel heavier/more tactical vs the lighter player
       const speed = f.isPlayer ? MOVE_SPEED : MOVE_SPEED * 0.5;
@@ -157,6 +180,9 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         f.state = ActionState.TAKEDOWN;
         f.stateTimer = TAKEDOWN_FRAMES;
         f.stamina -= STAMINA_COST_TAKEDOWN;
+        // Reset velocity
+        f.vx = 0;
+        playWhooshSound(isMuted);
         const reach = f.width * 1.2; // Increase range slightly
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.5 : f.x - reach + f.width * 0.5,
@@ -168,6 +194,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         f.state = ActionState.PUNCH;
         f.stateTimer = PUNCH_FRAMES;
         f.stamina -= STAMINA_COST_PUNCH;
+        playWhooshSound(isMuted);
         const reach = f.width * 0.8;
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.5 : f.x - reach + f.width * 0.5,
@@ -179,6 +206,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         f.state = ActionState.KICK;
         f.stateTimer = KICK_FRAMES;
         f.stamina -= STAMINA_COST_KICK;
+        playWhooshSound(isMuted);
         const reach = f.width * 1.0;
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.5 : f.x - reach + f.width * 0.5,
@@ -196,6 +224,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
     f.x = Math.max(0, Math.min(f.x, CANVAS_WIDTH - f.width));
 
     // Auto-face - only when truly idle (not recovering from action)
+    // Ensure we don't flip direction if we are in a state that shouldn't allow it
     if ((f.state === ActionState.IDLE || f.state === ActionState.WALK) && f.stateTimer <= 0) {
       f.direction = f.x < target.x ? 1 : -1;
     }
@@ -404,6 +433,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
           // Clash - attacker keeps playing takedown animation, defender stops
           attacker.stamina -= 10;
           attacker.hitbox = null; // No damage, but animation continues
+          playBlockSound(isMuted);
           
           defender.stamina -= 10;
           defender.state = ActionState.IDLE; // Defender goes to idle, no special animation
@@ -416,6 +446,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
           attacker.stamina -= 15;
           attacker.hitbox = null; // No damage, but animation continues
           attacker.x -= attacker.direction * 20;
+          playBlockSound(isMuted);
 
           defender.state = ActionState.IDLE; // No special animation for defender
           defender.stateTimer = 15;
@@ -427,7 +458,14 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
           defender.state = ActionState.SLAMMED;
           defender.stateTimer = SLAMMED_FRAMES;
           defender.hitbox = null;
+          // Force velocity to zero to stop any sliding
+          defender.vx = 0;
+          // Ensure direction stays locked during slam
+          defender.direction = defender.x < attacker.x ? 1 : -1;
           spawnBlood(defender.x + defender.width / 2, defender.y + defender.height * 0.8, 15);
+          playTakedownSound(isMuted);
+          // Also schedule a slam sound for when they hit the ground (approx 0.3s later)
+          setTimeout(() => playSlamSound(isMuted), 300);
           
           // Commentator shouts TAKEDOWN!
           triggerCommentatorShout('TAKEDOWN!');
@@ -444,12 +482,19 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
       if (defender.state === ActionState.BLOCK) {
         defender.stamina -= damage * 2;
         spawnBlood(defender.x + defender.width / 2, defender.y + defender.height * 0.2, 2);
+        playBlockSound(isMuted);
       } else {
         defender.health -= damage;
         defender.state = ActionState.HIT;
         defender.stateTimer = HIT_STUN_FRAMES;
         defender.hitbox = null;
         spawnBlood(defender.x + defender.width / 2, defender.y + defender.height * 0.2, 12);
+        playHitSound(isMuted, attacker.state === ActionState.KICK); // Kicks are heavy
+        
+        // Chance for commentator to react to a big hit
+        if (damage > 5 && Math.random() < 0.3) {
+           triggerCommentatorShout('OOOW!');
+        }
       }
       attacker.hitbox = null;
     }
@@ -475,6 +520,13 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
     }
 
     const FIXED_TIME_STEP = 1000 / 60;
+
+    // Intro shout check
+    if (!gameState.current.introShoutPlayed) {
+      gameState.current.introShoutPlayed = true;
+      // Right commentator (index 2) says "LET'S FUCKING GO" at start
+      setTimeout(() => triggerCommentatorShout("LET'S FUCKING GO!", 2), 500);
+    }
 
     while (frameRef.current.accumulator >= FIXED_TIME_STEP) {
       const { player, enemy } = gameState.current;
@@ -504,6 +556,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         player.health = 0;
         if (!gameState.current.isGameOver) {
           gameState.current.isGameOver = true;
+          playKOSound(isMuted);
           // Delayed KO screen (3 seconds) to see animation
           setTimeout(() => onGameOver('ENEMY'), 3000);
         }
@@ -513,6 +566,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
         enemy.health = 0;
         if (!gameState.current.isGameOver) {
           gameState.current.isGameOver = true;
+          playKOSound(isMuted);
           // Delayed KO screen (3 seconds) to see animation
           setTimeout(() => onGameOver('PLAYER'), 3000);
         }

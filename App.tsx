@@ -132,6 +132,21 @@ const App: React.FC = () => {
         {gameState === GameState.MENU && (
           <div className="absolute inset-0 bg-gradient-to-b from-black via-gray-900/95 to-black z-50 flex flex-col items-center justify-center text-center p-4 landscape:p-2 md:p-8 overflow-hidden">
             
+            {/* Info/Donate - Top Left */}
+            <div className="absolute top-4 left-4 z-50 flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
+                <a 
+                  href="https://www.kisa.ge/donate/kakha13" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="px-3 py-1.5 md:px-4 md:py-2 text-white/70 hover:text-white font-bold text-xs md:text-sm uppercase tracking-wider transition-all active:scale-95 flex items-center gap-2 border border-white/20 rounded hover:border-white/40 hover:bg-white/5 backdrop-blur-sm"
+                >
+                  <span>🎁</span> დონაცია
+                </a>
+                <span className="text-white/40 text-[10px] font-mono">v1.0</span>
+              </div>
+            </div>
+
             {/* Decorative background elements */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl"></div>
@@ -171,9 +186,8 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            {/* Controls - Desktop */}
-            <div className="hidden md:block mb-6 p-4 bg-black/50 border border-white/10 rounded-lg backdrop-blur-sm">
-              <p className="text-red-400 font-bold mb-3 tracking-widest text-sm">⌨️ CONTROLS</p>
+            {/* Controls - Desktop (and Mobile Portrait) */}
+            <div className="hidden portrait:block md:block mb-6 p-4 bg-black/50 border border-white/10 rounded-lg backdrop-blur-sm">
               <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-left text-sm">
                 <span className="text-gray-500">[<span className="text-white font-bold">← →</span>]</span> <span className="text-gray-300">MOVE</span>
                 <span className="text-gray-500">[<span className="text-teal-400 font-bold">Q</span>]</span> <span className="text-gray-300">PUNCH</span>
@@ -185,7 +199,6 @@ const App: React.FC = () => {
 
             {/* Mobile hint */}
             <div className="md:hidden text-gray-400 mb-3 landscape:mb-2 text-xs landscape:text-[10px] flex items-center gap-2">
-              <span className="text-xl">👆</span>
               <span>Use on-screen controls to Fight!</span>
             </div>
 
@@ -196,21 +209,10 @@ const App: React.FC = () => {
               style={{fontFamily: '"Press Start 2P", monospace'}}
             >
               <div className="flex items-center gap-3">
-                <span>🥊</span>
-                <span>FIGHT!</span>
-                <span>🥊</span>
+                <span>LET'S GO!</span>
               </div>
             </button>
 
-            {/* Donate */}
-            <a 
-              href="https://www.kisa.ge/donate/kakha13" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="mt-4 landscape:mt-2 md:mt-8 px-4 py-2 landscape:px-3 landscape:py-1 md:px-6 md:py-3 text-white/70 hover:text-white font-bold text-xs landscape:text-[10px] md:text-sm uppercase tracking-wider transition-all active:scale-95 flex items-center gap-2 border border-white/20 rounded hover:border-white/40 hover:bg-white/5"
-            >
-              <span>🎁</span> დონაცია
-            </a>
           </div>
         )}
 
@@ -251,7 +253,7 @@ const App: React.FC = () => {
             <p className={`text-sm landscape:text-xs md:text-xl mb-6 landscape:mb-3 md:mb-8 font-bold tracking-widest ${
               gameState === GameState.VICTORY ? 'text-yellow-200/80' : 'text-red-300/80'
             }`}>
-              {gameState === GameState.VICTORY ? '🏆 CHAMPION 🏆' : '💀 DEFEATED 💀'}
+              {gameState === GameState.VICTORY ? '🏆 CHAMPION 🏆' : 'DEFEATED'}
             </p>
 
             {/* Rematch Button */}
@@ -260,7 +262,7 @@ const App: React.FC = () => {
               className="group relative px-8 py-3 landscape:px-5 landscape:py-2 md:px-12 md:py-4 bg-gradient-to-r from-[#d10d25] to-[#ff1a3d] text-white font-black text-lg landscape:text-base md:text-2xl uppercase tracking-widest hover:brightness-125 active:scale-95 transition-all border-b-4 border-[#8a0918] hover:border-b-2 hover:translate-y-[2px] shadow-[0_4px_20px_rgba(209,13,37,0.4)]"
               style={{fontFamily: '"Press Start 2P", monospace'}}
             >
-              <span className="relative z-10">⚔️ REMATCH ⚔️</span>
+              <span className="relative z-10">👊 REMATCH</span>
             </button>
 
             {/* Donate Button */}
@@ -279,14 +281,14 @@ const App: React.FC = () => {
         {gameState === GameState.PLAYING && (
           <>
             <HUD />
-            <GameCanvas onGameOver={handleGameOver} input={input} />
+            <GameCanvas onGameOver={handleGameOver} input={input} isMuted={isMuted} />
           </>
         )}
       </div>
 
       {/* Mobile Controls Layer (Outside game container for maximizing space usage) */}
       {gameState === GameState.PLAYING && (
-        <div className="md:hidden">
+        <div className="lg:hidden">
           <Controls onInput={handleInput} />
         </div>
       )}

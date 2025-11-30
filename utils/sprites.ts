@@ -128,16 +128,26 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
     frontArmRot = -0.5; backArmRot = -0.5;
 
   } else if (state === ActionState.SLAMMED) {
-    bodyLean = -1.6; 
     const t = stateTimer; const max = SLAMMED_FRAMES;
-    if (t > max * 0.5) {
-        bodyY = -h * 0.5 + (max - t) * 6; 
-        frontLegRot = -0.5; backLegRot = -0.8; frontArmRot = -2.5;
-    } else if (t > max * 0.3) {
-        bodyY = -h * 0.2 - (max * 0.4 - t) * 2; 
-        frontLegRot = 0; backLegRot = 0;
+    const progress = 1 - (t / max);
+    
+    if (progress < 0.2) {
+        // Being lifted/falling
+        bodyLean = -0.5 - (progress * 4); 
+        bodyY = -h;
+    } else if (progress < 0.3) {
+        // Impact
+        bodyLean = -1.6; 
+        bodyY = -h * 0.9; // Squish
+        frontArmRot = -2.5; backArmRot = -2.5;
+        frontLegRot = -0.5; backLegRot = -0.5;
     } else {
-        bodyY = -h * 0.1; frontLegRot = 0.1; backLegRot = 0.1; frontArmRot = -2.8;
+        // Lying on ground
+        bodyLean = -1.57; // ~90 degrees
+        bodyY = -h; 
+        frontArmRot = -2.8; backArmRot = -2.8;
+        frontLegRot = 0.1; backLegRot = 0.1;
+        headOffsetY = 5;
     }
   } else if (state === ActionState.KO) {
     bodyLean = -1.57; bodyY = -h * 0.12;
@@ -471,8 +481,9 @@ export const drawBackground = (ctx: CanvasRenderingContext2D, width: number, hei
     // Red circle with "any" text
     ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#ffffff'; ctx.font = '18px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('any', 0, 2);
-    // White "any.ge" text below
-    ctx.fillStyle = '#ffffff'; ctx.font = '12px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText('any.ge', 0, 70);
+    // White "any.ge" text below - Larger, brighter, with shadow for readability
+    ctx.shadowColor = 'black'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 16px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText('any.ge', 0, 75);
     ctx.restore();
   };
   drawFloorSponsor(width * 0.15, wallBaseY + 50);

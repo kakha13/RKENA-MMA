@@ -31,20 +31,20 @@ const HUD: React.FC = () => {
   };
 
   return (
-    <div className="absolute top-4 left-0 w-full px-2 md:px-6 flex justify-center items-start pointer-events-none z-20" style={{ fontFamily: '"Press Start 2P", monospace' }}>
-      <div className="flex w-full max-w-5xl items-stretch h-auto relative filter drop-shadow-lg">
+    <div className="absolute top-2 md:top-4 left-0 w-full px-1 md:px-6 flex justify-center items-start pointer-events-none z-20" style={{ fontFamily: '"Press Start 2P", monospace' }}>
+      <div className="flex w-full max-w-5xl items-stretch h-auto relative filter drop-shadow-lg md:scale-100 origin-top mx-auto">
         
         {/* LEFT SIDE (Player 1) */}
-        <div className="flex-1 flex flex-col items-end relative mr-[-20px] z-10">
+        <div className="flex-1 flex flex-col items-end relative mr-[-10px] md:mr-[-20px] z-10">
           {/* Skewed Name Bar */}
-          <div className="w-full h-8 md:h-12 bg-[#d10d25] transform -skew-x-[20deg] flex items-center justify-end pr-8 pl-4 border-r-4 border-black/20">
-            <h2 className="text-white text-[6px] md:text-[10px] uppercase transform skew-x-[20deg] truncate">
+          <div className="w-full h-6 md:h-12 bg-[#d10d25] transform -skew-x-[20deg] flex items-center justify-end pr-4 md:pr-8 pl-2 md:pl-4 border-r-2 md:border-r-4 border-black/20">
+            <h2 className="text-white text-[5px] md:text-[10px] uppercase transform skew-x-[20deg] truncate leading-tight">
               MERAB SHARIKADZE
             </h2>
           </div>
           
           {/* Health Bar */}
-          <div className="w-[95%] h-2.5 mt-0.5 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20">
+          <div className="w-[95%] h-1.5 md:h-2.5 mt-0.5 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20">
              <div 
                className="h-full bg-green-500 transition-all duration-200"
                style={{ width: `${(p1.health / p1.maxHealth) * 100}%` }}
@@ -52,7 +52,7 @@ const HUD: React.FC = () => {
           </div>
 
           {/* Stamina Bar (Immediately below health) */}
-          <div className="w-[60%] h-1.5 mt-0.5 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden">
+          <div className="w-[60%] h-1 md:h-1.5 mt-0.5 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden">
              <div 
                className="h-full bg-blue-400 transition-all duration-200"
                style={{ width: `${(p1.stamina / p1.maxStamina) * 100}%` }}
@@ -61,41 +61,41 @@ const HUD: React.FC = () => {
         </div>
 
         {/* CENTER BLOCK */}
-        <div className="w-[280px] md:w-[340px] shrink-0 z-20 flex relative -mt-1 h-10 md:h-14">
+        <div className="w-[130px] md:w-[340px] shrink-0 z-20 flex relative -mt-0.5 md:-mt-1 h-8 md:h-14">
            {/* Center Black Background */}
-           <div className="absolute inset-0 bg-black transform -skew-x-[20deg] border-x-4 border-white/10"></div>
+           <div className="absolute inset-0 bg-black transform -skew-x-[20deg] border-x-2 md:border-x-4 border-white/10"></div>
            
-           <div className="relative w-full h-full flex items-center justify-between px-4 md:px-6 text-white transform -skew-x-[20deg] overflow-hidden">
+           <div className="relative w-full h-full flex items-center justify-between px-2 md:px-6 text-white transform -skew-x-[20deg] overflow-hidden">
                
                {/* RKENA LOGO */}
                <div className="flex items-center gap-1 transform skew-x-[20deg]">
-                  <span className="text-[10px] md:text-base">RKENA</span>
-                  <div className="w-2 h-2 md:w-3 md:h-3 bg-[#d10d25]"></div>
+                  <span className="text-[6px] md:text-base">RKENA</span>
+                  <div className="w-1.5 h-1.5 md:w-3 md:h-3 bg-[#d10d25]"></div>
                </div>
 
                {/* TIMER */}
-               <div className="text-[10px] md:text-sm transform skew-x-[20deg]">
+               <div className="text-[8px] md:text-sm transform skew-x-[20deg]">
                   {formatTime(time)}
                </div>
 
                {/* ROUND INDICATOR */}
-               <div className="bg-[#d10d25] px-1.5 py-0.5 transform skew-x-[0deg] ml-1">
-                  <span className="text-[8px] md:text-xs transform skew-x-[20deg] block">R1</span>
+               <div className="bg-[#d10d25] px-1 md:px-1.5 py-0.5 transform skew-x-[0deg] ml-0.5 md:ml-1">
+                  <span className="text-[5px] md:text-xs transform skew-x-[20deg] block">R1</span>
                </div>
            </div>
         </div>
 
         {/* RIGHT SIDE (Player 2) */}
-        <div className="flex-1 flex flex-col items-start relative ml-[-20px] z-10">
+        <div className="flex-1 flex flex-col items-start relative ml-[-10px] md:ml-[-20px] z-10">
           {/* Skewed Name Bar */}
-          <div className="w-full h-8 md:h-12 bg-[#d10d25] transform -skew-x-[20deg] flex items-center justify-start pl-8 pr-4 border-l-4 border-black/20">
-             <h2 className="text-white text-[6px] md:text-[10px] uppercase transform skew-x-[20deg] truncate">
+          <div className="w-full h-6 md:h-12 bg-[#d10d25] transform -skew-x-[20deg] flex items-center justify-start pl-4 md:pl-8 pr-2 md:pr-4 border-l-2 md:border-l-4 border-black/20">
+             <h2 className="text-white text-[5px] md:text-[10px] uppercase transform skew-x-[20deg] truncate leading-tight">
                JON JONES BOT
              </h2>
           </div>
           
           {/* Health Bar */}
-          <div className="w-[95%] h-2.5 mt-0.5 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20 ml-auto">
+          <div className="w-[95%] h-1.5 md:h-2.5 mt-0.5 bg-gray-900 transform -skew-x-[20deg] overflow-hidden border border-white/20 ml-auto">
              <div 
                className="h-full bg-yellow-500 transition-all duration-200 ml-auto"
                style={{ width: `${(p2.health / p2.maxHealth) * 100}%` }}
@@ -103,7 +103,7 @@ const HUD: React.FC = () => {
           </div>
 
           {/* Stamina Bar (Immediately below health) */}
-          <div className="w-[60%] h-1.5 mt-0.5 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden ml-auto">
+          <div className="w-[60%] h-1 md:h-1.5 mt-0.5 bg-gray-900/80 transform -skew-x-[20deg] overflow-hidden ml-auto">
              <div 
                className="h-full bg-blue-400 transition-all duration-200 ml-auto"
                style={{ width: `${(p2.stamina / p2.maxStamina) * 100}%` }}

@@ -24,10 +24,10 @@ export const STAMINA_REGEN = 0.5; // Faster regen for more action
 // INCREASED FRAME DURATIONS (Slower Gameplay)
 export const HIT_STUN_FRAMES = 40;
 export const SLAMMED_FRAMES = 100;
-export const PUNCH_FRAMES = 35; 
+export const PUNCH_FRAMES = 20; 
 export const KICK_FRAMES = 20;
-export const TAKEDOWN_FRAMES = 70;
-export const SPRAWL_FRAMES = 50;
+export const TAKEDOWN_FRAMES = 20;
+export const SPRAWL_FRAMES = 20;
 export const BLOCK_COOLDOWN = 30;
 
 // Colors
