@@ -14,7 +14,8 @@ export enum ActionState {
   HIT = 'HIT',
   KO = 'KO',
   TAKEDOWN = 'TAKEDOWN',
-  SPRAWL = 'SPRAWL'
+  SPRAWL = 'SPRAWL',
+  SLAMMED = 'SLAMMED'
 }
 
 export interface Rect {

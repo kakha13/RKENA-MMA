@@ -84,6 +84,20 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
     bodyY = -h * 0.25;
     // Legs kick back visually handled by rotation
     legOffset = -w * 0.5;
+  } else if (state === ActionState.SLAMMED) {
+    bodyLean = -1.6; // Flat on back
+    // Bounce animation
+    // Timer starts at 45. 
+    // 45-35: Being slammed down
+    // 35-25: Bounce up slightly
+    // 25-0: Flat
+    if (stateTimer > 35) {
+        bodyY = -h * 0.5 + (45 - stateTimer) * 10; // Falling fast
+    } else if (stateTimer > 25) {
+        bodyY = -h * 0.2 - (35 - stateTimer) * 3; // Bounce up
+    } else {
+        bodyY = -h * 0.1; // Rest on ground
+    }
   }
 
   ctx.rotate(bodyLean);
@@ -100,6 +114,7 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
       else backArmRot = -0.5;
   }
   if (state === ActionState.SPRAWL) backArmRot = -0.5; // Stabilizing on ground
+  if (state === ActionState.SLAMMED) backArmRot = -2.5; // Arms flailing up
 
   ctx.save();
   ctx.translate(torsoWidth * 0.2, -h * 0.75); // Shoulder pivot
@@ -115,6 +130,7 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
   let backLegRot = 0;
   if (state === ActionState.WALK) backLegRot = -legOffset / 20;
   if (state === ActionState.SPRAWL) backLegRot = 1.5; // Legs kicked back
+  if (state === ActionState.SLAMMED) backLegRot = -0.2; // Slightly bent on ground
   if (state === ActionState.TAKEDOWN) {
       if (stateTimer > 10 && stateTimer <= 25) backLegRot = -1.2; // Driving leg
       else backLegRot = -0.5;
@@ -262,6 +278,8 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
      else frontLegRot = -0.5;
   } else if (state === ActionState.SPRAWL) {
      frontLegRot = 1.5; // Kicked back
+  } else if (state === ActionState.SLAMMED) {
+     frontLegRot = 0.2; // Legs flopped
   }
 
   ctx.save();
@@ -307,6 +325,8 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
       frontArmLen += 15;
   } else if (state === ActionState.SPRAWL) {
       frontArmRot = -0.5;
+  } else if (state === ActionState.SLAMMED) {
+      frontArmRot = -2.5; // Flailing
   }
 
   ctx.save();

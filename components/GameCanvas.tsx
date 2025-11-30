@@ -5,7 +5,7 @@ import {
 } from '../types';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_Y, FIGHTER_WIDTH, FIGHTER_HEIGHT,
-  MOVE_SPEED, HIT_STUN_FRAMES, PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SPRAWL_FRAMES,
+  MOVE_SPEED, HIT_STUN_FRAMES, SLAMMED_FRAMES, PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SPRAWL_FRAMES,
   DAMAGE_PUNCH, DAMAGE_KICK, DAMAGE_TAKEDOWN,
   STAMINA_COST_PUNCH, STAMINA_COST_KICK, STAMINA_COST_TAKEDOWN, STAMINA_REGEN,
   COLOR_SKIN_P1, COLOR_SHORTS_P1, COLOR_SKIN_P2, COLOR_SHORTS_P2
@@ -84,7 +84,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
       f.stateTimer--;
       // Return to Idle when action complete
       if (f.stateTimer <= 0) {
-        if (f.state === ActionState.HIT || f.state === ActionState.SPRAWL) {
+        if (f.state === ActionState.HIT || f.state === ActionState.SPRAWL || f.state === ActionState.SLAMMED) {
           f.state = ActionState.IDLE;
         } else if (f.state === ActionState.PUNCH || f.state === ActionState.KICK || f.state === ActionState.BLOCK || f.state === ActionState.TAKEDOWN) {
           f.state = ActionState.IDLE;
@@ -95,7 +95,8 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
 
     const isBusy = f.state === ActionState.PUNCH || f.state === ActionState.KICK || 
                    f.state === ActionState.HIT || f.state === ActionState.BLOCK ||
-                   f.state === ActionState.TAKEDOWN || f.state === ActionState.SPRAWL;
+                   f.state === ActionState.TAKEDOWN || f.state === ActionState.SPRAWL || 
+                   f.state === ActionState.SLAMMED;
 
     // Movement
     if (!isBusy) {
@@ -183,8 +184,9 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
 
     // Sprawl Logic
     if (player.state === ActionState.TAKEDOWN && dist < attackRange + 80 && facingPlayer) {
-       // High chance to block (sprawl) if player shoots takedown
-       if (Math.random() > 0.3) {
+       // Chance to block (sprawl) if player shoots takedown
+       // Set to 50% chance as requested (Player approx 50% success)
+       if (Math.random() > 0.5) {
          controls.block = true; 
          return controls;
        }
@@ -196,15 +198,17 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
       if (player.x > ai.x) controls.right = true;
       else controls.left = true;
       
-      if (Math.random() < 0.05 && ai.stamina > 50) {
+      // Very small chance to shoot from distance (reduced from 0.1 to 0.005 to prevent spam)
+      if (Math.random() < 0.005 && ai.stamina > 50) {
          controls.takedown = true;
       }
     } else if (dist < attackRange && facingPlayer) {
       const rand = Math.random();
-      if (rand < 0.4 && ai.stamina > 20) controls.punch = true;
-      else if (rand < 0.6 && ai.stamina > 20) controls.kick = true;
-      else if (rand < 0.7 && ai.stamina > 40) controls.takedown = true;
-      else if (rand < 0.9) controls.block = true;
+      // Adjusted Logic: Takedown chance lowered significantly to 10%
+      if (rand < 0.4 && ai.stamina > 20) controls.punch = true; // 40%
+      else if (rand < 0.8 && ai.stamina > 20) controls.kick = true; // 40%
+      else if (rand < 0.9 && ai.stamina > 35) controls.takedown = true; // 10% Takedown Chance
+      else controls.block = true; // 10%
     } else {
         if (player.x > ai.x) controls.left = true;
         else controls.right = true;
@@ -227,7 +231,7 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
 
   const checkCombatCollisions = (attacker: Fighter, defender: Fighter) => {
      // Allow collision detection to run throughout the active phase of the takedown
-     if (attacker.hitbox && (attacker.stateTimer > 5 || attacker.state === ActionState.TAKEDOWN) && defender.state !== ActionState.HIT && defender.state !== ActionState.KO) {
+     if (attacker.hitbox && (attacker.stateTimer > 5 || attacker.state === ActionState.TAKEDOWN) && defender.state !== ActionState.HIT && defender.state !== ActionState.SLAMMED && defender.state !== ActionState.KO) {
        const defenderHurtbox = { x: defender.x, y: defender.y, w: defender.width, h: defender.height };
        
        if (checkCollision(attacker.hitbox, defenderHurtbox)) {
@@ -245,12 +249,12 @@ function GameCanvas({ onGameOver, input }: GameCanvasProps) {
                 attacker.hitbox = null;
                 return;
              } else {
-                // SUCCESSFUL TAKEDOWN
+                // SUCCESSFUL TAKEDOWN -> SLAM
                 defender.health -= DAMAGE_TAKEDOWN;
-                defender.state = ActionState.HIT;
-                defender.stateTimer = HIT_STUN_FRAMES * 2;
+                defender.state = ActionState.SLAMMED; // Trigger new animation
+                defender.stateTimer = SLAMMED_FRAMES;
                 defender.hitbox = null;
-                spawnBlood(defender.x + defender.width/2, defender.y + defender.height * 0.8, 8);
+                spawnBlood(defender.x + defender.width/2, defender.y + defender.height * 0.8, 15); // More blood
                 attacker.hitbox = null;
                 return;
              }

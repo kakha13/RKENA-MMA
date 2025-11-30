@@ -22,6 +22,7 @@ export const STAMINA_COST_TAKEDOWN = 35; // Expensive move
 export const STAMINA_REGEN = 0.6;
 
 export const HIT_STUN_FRAMES = 15;
+export const SLAMMED_FRAMES = 45; // Duration of being slammed to ground
 export const PUNCH_FRAMES = 16; 
 export const KICK_FRAMES = 26;
 export const TAKEDOWN_FRAMES = 30;
