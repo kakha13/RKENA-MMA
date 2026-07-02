@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { MAX_ROUNDS } from '../constants';
+import { MAX_ROUNDS, ROUND_DURATION } from '../constants';
 
 interface FighterHUDData {
   health: number;
@@ -11,6 +11,8 @@ interface FighterHUDData {
   maxPowerMeter: number;
   name: string;
   comboCount: number;
+  counterWindow?: number;
+  dizzy?: boolean;
 }
 
 interface HUDProps {
@@ -27,7 +29,7 @@ const HUD: React.FC<HUDProps> = ({ roundsWon, currentRound }) => {
     health: 100, maxHealth: 100, stamina: 100, maxStamina: 100,
     powerMeter: 0, maxPowerMeter: 100, name: 'ENEMY', comboCount: 0
   });
-  const [time, setTime] = useState(180);
+  const [time, setTime] = useState(ROUND_DURATION);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -46,8 +48,8 @@ const HUD: React.FC<HUDProps> = ({ roundsWon, currentRound }) => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const p1HealthPct = (p1.health / p1.maxHealth) * 100;
-  const p2HealthPct = (p2.health / p2.maxHealth) * 100;
+  const p1HealthPct = Math.max(0, (p1.health / p1.maxHealth) * 100);
+  const p2HealthPct = Math.max(0, (p2.health / p2.maxHealth) * 100);
   const p1PowerPct = (p1.powerMeter / p1.maxPowerMeter) * 100;
   const p2PowerPct = (p2.powerMeter / p2.maxPowerMeter) * 100;
 
@@ -131,10 +133,18 @@ const HUD: React.FC<HUDProps> = ({ roundsWon, currentRound }) => {
             />
           </div>
 
-          {/* Combo display */}
-          {p1.comboCount >= 2 && (
-            <div className="transform skew-x-[20deg] mt-0.5">
-              <span className="text-[6px] md:text-[8px] text-yellow-400 font-bold">{p1.comboCount}x COMBO</span>
+          {/* Combo / status display */}
+          {(p1.comboCount >= 2 || p1.dizzy || (p1.counterWindow ?? 0) > 0) && (
+            <div className="transform skew-x-[20deg] mt-0.5 flex gap-2">
+              {p1.comboCount >= 2 && (
+                <span className="text-[6px] md:text-[8px] text-yellow-400 font-bold">{p1.comboCount}x COMBO</span>
+              )}
+              {(p1.counterWindow ?? 0) > 0 && (
+                <span className="text-[6px] md:text-[8px] text-cyan-300 font-bold animate-pulse">COUNTER!</span>
+              )}
+              {p1.dizzy && (
+                <span className="text-[6px] md:text-[8px] text-red-400 font-bold animate-pulse">ROCKED!</span>
+              )}
             </div>
           )}
         </div>
@@ -210,10 +220,15 @@ const HUD: React.FC<HUDProps> = ({ roundsWon, currentRound }) => {
             />
           </div>
 
-          {/* Combo display */}
-          {p2.comboCount >= 2 && (
-            <div className="ml-auto mt-0.5 transform skew-x-[20deg]">
-              <span className="text-[6px] md:text-[8px] text-yellow-400 font-bold">{p2.comboCount}x COMBO</span>
+          {/* Combo / status display */}
+          {(p2.comboCount >= 2 || p2.dizzy) && (
+            <div className="ml-auto mt-0.5 transform skew-x-[20deg] flex gap-2">
+              {p2.dizzy && (
+                <span className="text-[6px] md:text-[8px] text-yellow-300 font-bold animate-pulse">ROCKED!</span>
+              )}
+              {p2.comboCount >= 2 && (
+                <span className="text-[6px] md:text-[8px] text-yellow-400 font-bold">{p2.comboCount}x COMBO</span>
+              )}
             </div>
           )}
         </div>

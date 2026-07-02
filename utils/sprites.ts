@@ -1,7 +1,7 @@
 
 import { Fighter, ActionState } from '../types';
 import {
-  PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SLAMMED_FRAMES, HIT_STUN_FRAMES, SPECIAL_FRAMES
+  PUNCH_FRAMES, KICK_FRAMES, TAKEDOWN_FRAMES, SLAMMED_FRAMES, HIT_STUN_FRAMES, SPECIAL_FRAMES, DODGE_FRAMES
 } from '../constants';
 
 const drawBorjgali = (ctx: CanvasRenderingContext2D, bx: number, by: number, bs: number, color: string = '#ffffff') => {
@@ -103,6 +103,33 @@ const drawHead = (ctx: CanvasRenderingContext2D, fighter: Fighter, headX: number
     ctx.fillRect(headX, headBaseY + headSize * 0.5, headSize, headSize * 0.5);
     ctx.fillStyle = 'rgba(10,5,0,0.3)';
     ctx.fillRect(headX, headBaseY + headSize * 0.7, headSize, headSize * 0.3);
+  } else if (characterId === 'topuria') {
+    // Slick dark hair, sharp fade
+    ctx.fillStyle = '#141414';
+    ctx.fillRect(headX, headBaseY - 4, headSize, 11);
+    ctx.fillRect(headX, headBaseY, headSize * 0.15, headSize * 0.35);
+    // Full trimmed beard
+    ctx.fillStyle = '#1c1108';
+    ctx.fillRect(headX, headBaseY + headSize * 0.58, headSize, headSize * 0.42);
+    ctx.fillRect(headX, headBaseY + headSize * 0.35, headSize * 0.22, headSize * 0.35);
+    ctx.fillRect(headX + headSize * 0.78, headBaseY + headSize * 0.35, headSize * 0.22, headSize * 0.35);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(headX + headSize * 0.65, headBaseY + headSize * 0.35, headSize * 0.25, headSize * 0.1);
+    ctx.fillStyle = '#3e2723';
+    ctx.fillRect(headX + headSize * 0.38, headBaseY + headSize * 0.72, headSize * 0.28, headSize * 0.05);
+  } else if (characterId === 'pereira') {
+    // Short mohawk-ish crop
+    ctx.fillStyle = '#0d0d0d';
+    ctx.fillRect(headX + headSize * 0.15, headBaseY - 7, headSize * 0.7, 12);
+    ctx.fillRect(headX, headBaseY - 2, headSize, 7);
+    // Stone-face cheek shadow
+    ctx.fillStyle = 'rgba(20,10,5,0.35)';
+    ctx.fillRect(headX + headSize * 0.05, headBaseY + headSize * 0.55, headSize * 0.9, headSize * 0.3);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(headX + headSize * 0.65, headBaseY + headSize * 0.35, headSize * 0.25, headSize * 0.1);
+    // Tribal chin mark
+    ctx.fillStyle = 'rgba(10,30,15,0.7)';
+    ctx.fillRect(headX + headSize * 0.42, headBaseY + headSize * 0.8, headSize * 0.16, headSize * 0.2);
   }
 
   if (isKO) {
@@ -202,6 +229,24 @@ const drawTorsoDetails = (ctx: CanvasRenderingContext2D, fighter: Fighter, torso
     // Orange stripe on shorts
     ctx.fillStyle = '#f97316';
     ctx.fillRect(-torsoWidth * 0.45, bodyY + h * 0.47, torsoWidth * 0.9, 5);
+  } else if (characterId === 'topuria') {
+    // Red/white waistband, matador flair
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(-torsoWidth * 0.45, bodyY + h * 0.47, torsoWidth * 0.9, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(-torsoWidth * 0.45, bodyY + h * 0.47 + 5, torsoWidth * 0.9, 2);
+    // Chest tattoo hint
+    ctx.fillStyle = 'rgba(30,20,10,0.45)';
+    ctx.fillRect(-torsoWidth * 0.3, bodyY + h * 0.24, torsoWidth * 0.28, h * 0.1);
+  } else if (characterId === 'pereira') {
+    // Tribal chest paint
+    ctx.fillStyle = 'rgba(15,45,25,0.55)';
+    ctx.fillRect(-torsoWidth * 0.35, bodyY + h * 0.22, 7, h * 0.22);
+    ctx.fillRect(-torsoWidth * 0.1, bodyY + h * 0.25, 7, h * 0.19);
+    ctx.fillRect(torsoWidth * 0.15, bodyY + h * 0.22, 7, h * 0.22);
+    // Green waistband
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(-torsoWidth * 0.45, bodyY + h * 0.47, torsoWidth * 0.9, 4);
   }
 };
 
@@ -320,6 +365,30 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
       // Recovery
       bodyLean = 0.1; frontArmRot = -0.8; frontArmExt = 0;
     }
+  } else if (state === ActionState.DODGE) {
+    // Slip: lean way back with head off the center line
+    const progress = 1 - stateTimer / DODGE_FRAMES;
+    const depth = Math.sin(progress * Math.PI); // in and out of the slip
+    bodyLean = -0.55 * depth;
+    bodyY = -h + h * 0.06 * depth;
+    headOffsetX = -10 * depth;
+    headOffsetY = 4 * depth;
+    frontArmRot = -1.6 + 0.4 * depth;
+    backArmRot = -1.8 + 0.4 * depth;
+    frontLegRot = 0.25 * depth;
+    backLegRot = -0.35 * depth;
+  } else if (state === ActionState.DIZZY) {
+    // Rocked: wobbling on rubber legs
+    const wobble = Math.sin(time / 90);
+    const sway = Math.sin(time / 210);
+    bodyLean = sway * 0.28;
+    bodyY = -h * 0.92 + Math.abs(wobble) * 4;
+    headOffsetX = wobble * 6;
+    headOffsetY = 4;
+    frontArmRot = -0.2 + wobble * 0.3;
+    backArmRot = 0.2 - wobble * 0.3;
+    frontLegRot = sway * 0.2;
+    backLegRot = -sway * 0.2;
   } else if (state === ActionState.SPRAWL) {
     bodyLean = 1.4; bodyY = -h * 0.25;
     frontLegRot = 1.5; backLegRot = 1.5;
@@ -440,6 +509,22 @@ export const drawFighter = (ctx: CanvasRenderingContext2D, fighter: Fighter) => 
     const alpha = (hitFlash / 8) * 0.7;
     ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
     ctx.fillRect(-torsoWidth / 2 - 5, bodyY, torsoWidth + 10, h);
+  }
+
+  // Dizzy stars orbiting the head
+  if (state === ActionState.DIZZY) {
+    const starY = bodyY + h * 0.15 - headSize - 14;
+    for (let i = 0; i < 3; i++) {
+      const angle = time / 220 + (i * Math.PI * 2) / 3;
+      const sx = Math.cos(angle) * headSize * 0.9;
+      const sy = starY + Math.sin(angle) * 6;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(angle);
+      ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#ffffff';
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.restore();
+    }
   }
 
   ctx.restore();

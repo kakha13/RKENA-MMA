@@ -1,28 +1,40 @@
 
 import React, { useRef, useEffect } from 'react';
 import {
-  ActionState, Fighter, InputState, Particle, Rect, CharacterConfig, Difficulty
+  ActionState, Fighter, InputState, Particle, Rect, CharacterConfig, Difficulty,
+  RoundEndPayload, createEmptyStats
 } from '../types';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_Y, FIGHTER_WIDTH, FIGHTER_HEIGHT,
-  MOVE_SPEED, HIT_STUN_FRAMES, SLAMMED_FRAMES, PUNCH_FRAMES, KICK_FRAMES,
-  TAKEDOWN_FRAMES, SPRAWL_FRAMES, BLOCK_COOLDOWN, SPECIAL_FRAMES,
-  STAMINA_COST_PUNCH, STAMINA_COST_KICK, STAMINA_COST_TAKEDOWN, STAMINA_COST_SPECIAL, STAMINA_REGEN,
-  POWER_METER_MAX, POWER_GAIN_PUNCH, POWER_GAIN_KICK, POWER_GAIN_TAKEDOWN, POWER_GAIN_ON_HIT,
+  MOVE_SPEED, FRICTION, HIT_STUN_FRAMES, SLAMMED_FRAMES, PUNCH_FRAMES, KICK_FRAMES,
+  TAKEDOWN_FRAMES, BLOCK_COOLDOWN, SPECIAL_FRAMES,
+  STAMINA_COST_PUNCH, STAMINA_COST_KICK, STAMINA_COST_TAKEDOWN, STAMINA_COST_SPECIAL,
+  STAMINA_COST_DODGE, STAMINA_REGEN, STAMINA_EXHAUSTED_THRESHOLD,
+  POWER_METER_MAX, POWER_GAIN_PUNCH, POWER_GAIN_KICK, POWER_GAIN_TAKEDOWN, POWER_GAIN_ON_HIT, POWER_GAIN_PARRY,
   SCREEN_SHAKE_HEAVY, SCREEN_SHAKE_LIGHT, SCREEN_SHAKE_DECAY,
-  COMBO_WINDOW_MS, DIFFICULTY_SETTINGS
+  COMBO_WINDOW_MS, DIFFICULTY_SETTINGS, ROUND_DURATION,
+  DODGE_FRAMES, DODGE_IFRAME_START, DODGE_IFRAME_END, DODGE_COOLDOWN_FRAMES, DODGE_SLIDE_SPEED,
+  COUNTER_WINDOW_FRAMES, COUNTER_DAMAGE_MULT,
+  PARRY_WINDOW_FRAMES, PARRY_STUN_FRAMES,
+  DIZZY_HITS_REQUIRED, DIZZY_WINDOW_MS, DIZZY_FRAMES, DIZZY_DAMAGE_MULT,
+  COMBO_DAMAGE_DECAY, COMBO_DAMAGE_FLOOR,
+  HITSTOP_LIGHT, HITSTOP_HEAVY, HITSTOP_SPECIAL,
+  KNOCKBACK_PUNCH, KNOCKBACK_KICK,
+  INTRO_ROUND_FRAMES, INTRO_FIGHT_FRAMES,
+  KO_SLOWMO_FRAMES, KO_SLOWMO_FACTOR
 } from '../constants';
 import { drawFighter, drawBackground } from '../utils/sprites';
 import {
   playHitSound, playBlockSound, playWhooshSound, playSlamSound,
   playTakedownSound, playKOSound, playSpecialSound, playRoundBellSound,
-  playVictorySound, playCrowdCheer, playComboSound
+  playVictorySound, playCrowdCheer, playComboSound, playParrySound, playDodgeSound, playDizzySound
 } from '../utils/audio';
 
 export interface GameCanvasProps {
-  onRoundEnd: (winner: 'PLAYER' | 'ENEMY' | 'DRAW') => void;
-  input: InputState;
+  onRoundEnd: (payload: RoundEndPayload) => void;
+  inputRef: React.MutableRefObject<InputState>;
   isMuted: boolean;
+  paused: boolean;
   playerConfig: CharacterConfig;
   enemyConfig: CharacterConfig;
   difficulty: Difficulty;
@@ -38,7 +50,17 @@ const COMMENTATOR_LINES = {
   combo: ["COMBINATION!", "BEAUTIFUL COMBO!", "ON A ROLL!", "LIGHTS HIM UP!"],
   danger: ["HE'S HURT!", "IN SERIOUS TROUBLE!", "ALMOST FINISHED!", "WOBBLED!"],
   special: ["WHAT A MOVE!", "SIGNATURE TECHNIQUE!", "UNBELIEVABLE!", "CROWD GOES WILD!"],
+  parry: ["WHAT A COUNTER!", "READ IT PERFECTLY!", "INCREDIBLE TIMING!", "MATRIX STUFF!"],
+  dodge: ["SLIPS IT!", "MISSES BY INCHES!", "GREAT HEAD MOVEMENT!", "CAN'T TOUCH HIM!"],
+  dizzy: ["HE'S ROCKED!", "ON WOBBLY LEGS!", "THE LIGHTS ARE FLICKERING!", "FINISH HIM!"],
   general: ["OOOW!", "BIG SHOT!", "EXCELLENT!", "THIS IS INCREDIBLE!"]
+};
+
+const AI_ATTACK_WEIGHTS: Record<string, { punch: number; kick: number; takedown: number }> = {
+  striker: { punch: 0.35, kick: 0.45, takedown: 0.05 },
+  grappler: { punch: 0.20, kick: 0.12, takedown: 0.48 },
+  power: { punch: 0.45, kick: 0.28, takedown: 0.08 },
+  balanced: { punch: 0.33, kick: 0.30, takedown: 0.20 }
 };
 
 const createFighter = (x: number, isPlayer: boolean, config: CharacterConfig): Fighter => ({
@@ -73,13 +95,28 @@ const createFighter = (x: number, isPlayer: boolean, config: CharacterConfig): F
   takedownDamage: config.takedownDamage,
   specialName: config.specialName,
   specialDamage: config.specialDamage,
-  specialType: config.specialType
+  specialType: config.specialType,
+  dodgeCooldown: 0,
+  counterWindow: 0,
+  recentHitsTaken: [],
+  hasBeenDizzy: false,
+  stats: createEmptyStats()
 });
 
-function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, difficulty, round }: GameCanvasProps) {
+const NO_INPUT: InputState = {
+  left: false, right: false, punch: false, kick: false, block: false, takedown: false, special: false, dodge: false
+};
+
+function GameCanvas({ onRoundEnd, inputRef, isMuted, paused, playerConfig, enemyConfig, difficulty, round }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   const frameRef = useRef({ lastTime: 0, accumulator: 0 });
+  const mutedRef = useRef(isMuted);
+  const pausedRef = useRef(paused);
+  const onRoundEndRef = useRef(onRoundEnd);
+  mutedRef.current = isMuted;
+  pausedRef.current = paused;
+  onRoundEndRef.current = onRoundEnd;
 
   const diffSettings = DIFFICULTY_SETTINGS[difficulty];
 
@@ -88,15 +125,20 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
     enemy: createFighter(550, false, enemyConfig),
     particles: [] as Particle[],
     isRoundOver: false,
-    timeRemaining: 180,
+    timeRemaining: ROUND_DURATION,
     lastTimeUpdate: Date.now(),
     aiMoveDirection: 0 as -1 | 0 | 1,
     aiMoveTimer: 0,
     commentatorShout: null as { text: string; timer: number; x: number } | null,
-    introShoutPlayed: false,
+    introBellPlayed: false,
     screenShake: 0,
     moveAnnouncement: null as { text: string; timer: number; color: string; x: number; y: number } | null,
-    roundStarted: false
+    introTimer: INTRO_ROUND_FRAMES + INTRO_FIGHT_FRAMES,
+    hitstop: 0,
+    slowMo: 0,
+    slowMoTick: 0,
+    koTarget: null as Fighter | null,
+    koBannerTimer: 0
   });
 
   const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -104,23 +146,25 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
   const checkCollision = (r1: Rect, r2: Rect) =>
     r1.x < r2.x + r2.w && r1.x + r1.w > r2.x && r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
 
-  const spawnParticles = (x: number, y: number, count: number, type: 'blood' | 'spark' | 'sweat' | 'star' = 'blood') => {
-    const colors: Record<typeof type, string[]> = {
+  const spawnParticles = (x: number, y: number, count: number, type: Particle['type'] = 'blood') => {
+    const colors: Record<Particle['type'], string[]> = {
       blood: ['#aa0000', '#cc0000', '#880000'],
       spark: ['#ffff00', '#ffaa00', '#ffffff'],
       sweat: ['#aaddff', '#88ccff'],
-      star: ['#ffff88', '#ffcc00', '#ffffff']
+      star: ['#ffff88', '#ffcc00', '#ffffff'],
+      dust: ['#8a8a7a', '#6e6e60', '#a0a090'],
+      ring: ['#ffffff']
     };
     for (let i = 0; i < count; i++) {
       const colorArr = colors[type];
       gameState.current.particles.push({
         x, y,
-        vx: (Math.random() - 0.5) * (type === 'star' ? 8 : 15),
-        vy: (Math.random() - 0.5) * 15 - (type === 'star' ? 3 : 0),
-        life: 20 + Math.random() * 20,
-        maxLife: 40,
+        vx: (Math.random() - 0.5) * (type === 'star' ? 8 : type === 'dust' ? 6 : 15),
+        vy: type === 'dust' ? -(Math.random() * 3) : (Math.random() - 0.5) * 15 - (type === 'star' ? 3 : 0),
+        life: type === 'ring' ? 14 : 20 + Math.random() * 20,
+        maxLife: type === 'ring' ? 14 : 40,
         color: colorArr[Math.floor(Math.random() * colorArr.length)],
-        size: Math.random() * (type === 'star' ? 5 : 6) + (type === 'star' ? 4 : 3),
+        size: type === 'ring' ? 8 : Math.random() * (type === 'star' ? 5 : 6) + (type === 'star' ? 4 : 3),
         type
       });
     }
@@ -128,29 +172,32 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
 
   const triggerCommentator = (text: string, forceIndex?: number) => {
     const idx = forceIndex !== undefined ? forceIndex : Math.floor(Math.random() * 3);
-    gameState.current.commentatorShout = {
-      text,
-      timer: 90,
-      x: idx / 3
-    };
+    gameState.current.commentatorShout = { text, timer: 90, x: idx / 3 };
   };
 
   const showMoveAnnouncement = (text: string, color: string, x: number, y: number) => {
-    gameState.current.moveAnnouncement = {
-      text,
-      timer: 50,
-      color,
-      x,
-      y
-    };
+    gameState.current.moveAnnouncement = { text, timer: 50, color, x, y };
   };
 
   const applyScreenShake = (amount: number) => {
     gameState.current.screenShake = Math.max(gameState.current.screenShake, amount);
   };
 
+  const applyHitstop = (frames: number) => {
+    gameState.current.hitstop = Math.max(gameState.current.hitstop, frames);
+  };
+
+  const clampVitals = (f: Fighter) => {
+    f.health = Math.max(0, Math.min(f.health, f.maxHealth));
+    f.stamina = Math.max(0, Math.min(f.stamina, f.maxStamina));
+  };
+
   const updateFighter = (f: Fighter, controls: InputState, target: Fighter) => {
     if (f.state === ActionState.KO || f.state === ActionState.VICTORY_POSE) return;
+
+    // Cooldowns / windows
+    if (f.dodgeCooldown > 0) f.dodgeCooldown--;
+    if (f.counterWindow > 0) f.counterWindow--;
 
     // Stamina regen
     if (f.state === ActionState.IDLE || f.state === ActionState.WALK) {
@@ -164,12 +211,14 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
     if (f.stateTimer > 0) {
       f.stateTimer--;
       if (f.stateTimer <= 0) {
-        if (f.state === ActionState.HIT || f.state === ActionState.SPRAWL || f.state === ActionState.SLAMMED) {
+        if (f.state === ActionState.HIT || f.state === ActionState.SPRAWL ||
+          f.state === ActionState.SLAMMED || f.state === ActionState.DIZZY) {
           f.state = ActionState.IDLE;
+          f.vx = 0;
           f.y = GROUND_Y - FIGHTER_HEIGHT;
         } else if (f.state === ActionState.PUNCH || f.state === ActionState.KICK ||
           f.state === ActionState.BLOCK || f.state === ActionState.TAKEDOWN ||
-          f.state === ActionState.SPECIAL) {
+          f.state === ActionState.SPECIAL || f.state === ActionState.DODGE) {
           f.state = ActionState.IDLE;
           f.hitbox = null;
         }
@@ -178,8 +227,19 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
 
     const isBusy = [
       ActionState.PUNCH, ActionState.KICK, ActionState.HIT, ActionState.BLOCK,
-      ActionState.TAKEDOWN, ActionState.SPRAWL, ActionState.SLAMMED, ActionState.SPECIAL
+      ActionState.TAKEDOWN, ActionState.SPRAWL, ActionState.SLAMMED, ActionState.SPECIAL,
+      ActionState.DODGE, ActionState.DIZZY
     ].includes(f.state);
+
+    // Knockback slide while stunned
+    if (f.state === ActionState.HIT || f.state === ActionState.DIZZY) {
+      if (Math.abs(f.vx) > 0.2) {
+        f.x += f.vx;
+        f.vx *= FRICTION;
+      } else {
+        f.vx = 0;
+      }
+    }
 
     // Slammed vertical animation
     if (f.state === ActionState.SLAMMED) {
@@ -196,9 +256,15 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
       return;
     }
 
-    // Movement
+    // Dodge slide (slips back, away from facing direction)
+    if (f.state === ActionState.DODGE) {
+      f.x -= f.direction * DODGE_SLIDE_SPEED * (f.stateTimer / DODGE_FRAMES);
+    }
+
+    // Movement (exhausted fighters slow down)
+    const exhausted = f.stamina < STAMINA_EXHAUSTED_THRESHOLD;
     if (!isBusy) {
-      const speed = MOVE_SPEED * f.speed;
+      const speed = MOVE_SPEED * f.speed * (exhausted ? 0.55 : 1);
       if (controls.left) {
         f.x -= speed;
         f.state = ActionState.WALK;
@@ -209,7 +275,8 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         f.state = ActionState.IDLE;
       }
     } else if (f.state === ActionState.TAKEDOWN || f.state === ActionState.SPECIAL) {
-      if (f.stateTimer > TAKEDOWN_FRAMES * 0.3 && f.stateTimer <= TAKEDOWN_FRAMES * 0.8) {
+      const totalFrames = f.state === ActionState.TAKEDOWN ? TAKEDOWN_FRAMES : SPECIAL_FRAMES;
+      if (f.stateTimer > totalFrames * 0.3 && f.stateTimer <= totalFrames * 0.8) {
         const dashSpeed = MOVE_SPEED * f.speed * 1.2;
         const distToTarget = Math.abs(f.x - target.x);
         if (distToTarget > f.width * 0.8) {
@@ -224,14 +291,21 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
 
     // Actions
     if (!isBusy && f.stamina >= 10) {
-      // Special move
-      if (controls.special && f.powerMeter >= POWER_METER_MAX && f.stamina >= STAMINA_COST_SPECIAL) {
+      if (controls.dodge && f.dodgeCooldown <= 0 && f.stamina >= STAMINA_COST_DODGE) {
+        f.state = ActionState.DODGE;
+        f.stateTimer = DODGE_FRAMES;
+        f.dodgeCooldown = DODGE_COOLDOWN_FRAMES;
+        f.stamina -= STAMINA_COST_DODGE;
+        f.vx = 0;
+        playDodgeSound(mutedRef.current);
+      } else if (controls.special && f.powerMeter >= POWER_METER_MAX && f.stamina >= STAMINA_COST_SPECIAL) {
         f.state = ActionState.SPECIAL;
         f.stateTimer = SPECIAL_FRAMES;
         f.stamina -= STAMINA_COST_SPECIAL;
         f.powerMeter = 0;
         f.vx = 0;
-        playSpecialSound(isMuted);
+        f.stats.strikesThrown++;
+        playSpecialSound(mutedRef.current);
         const reach = f.width * 1.4;
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.3 : f.x - reach + f.width * 0.7,
@@ -244,7 +318,8 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         f.stateTimer = TAKEDOWN_FRAMES;
         f.stamina -= STAMINA_COST_TAKEDOWN;
         f.vx = 0;
-        playWhooshSound(isMuted);
+        f.stats.strikesThrown++;
+        playWhooshSound(mutedRef.current);
         const reach = f.width * 1.2;
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.5 : f.x - reach + f.width * 0.5,
@@ -256,7 +331,8 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         f.state = ActionState.PUNCH;
         f.stateTimer = PUNCH_FRAMES;
         f.stamina -= STAMINA_COST_PUNCH;
-        playWhooshSound(isMuted);
+        f.stats.strikesThrown++;
+        playWhooshSound(mutedRef.current);
         const reach = f.width * 0.8;
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.5 : f.x - reach + f.width * 0.5,
@@ -268,7 +344,8 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         f.state = ActionState.KICK;
         f.stateTimer = KICK_FRAMES;
         f.stamina -= STAMINA_COST_KICK;
-        playWhooshSound(isMuted);
+        f.stats.strikesThrown++;
+        playWhooshSound(mutedRef.current);
         const reach = f.width * 1.0;
         f.hitbox = {
           x: f.direction === 1 ? f.x + f.width * 0.5 : f.x - reach + f.width * 0.5,
@@ -290,15 +367,14 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
   };
 
   const updateAI = (ai: Fighter, player: Fighter): InputState => {
-    const controls: InputState = {
-      left: false, right: false, punch: false, kick: false, block: false, takedown: false, special: false
-    };
+    const controls: InputState = { ...NO_INPUT };
     if (ai.state === ActionState.KO || ai.state === ActionState.VICTORY_POSE) return controls;
     if (ai.stateTimer > 0) return controls;
 
     const dist = Math.abs(ai.x - player.x);
     const attackRange = ai.width * 1.2;
     const facingPlayer = (ai.direction === 1 && player.x > ai.x) || (ai.direction === -1 && player.x < ai.x);
+    const weights = AI_ATTACK_WEIGHTS[enemyConfig.aiProfile] ?? AI_ATTACK_WEIGHTS.balanced;
 
     // Sprawl vs takedown
     if (player.state === ActionState.TAKEDOWN && dist < attackRange + 80 && facingPlayer) {
@@ -308,8 +384,26 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
       }
     }
 
-    // Use special move when power is full (AI uses it less often)
-    if (ai.powerMeter >= POWER_METER_MAX && Math.random() < 0.3 && dist < attackRange * 1.5) {
+    // Defensive reads: dodge or parry incoming strikes
+    const playerAttacking = (player.state === ActionState.PUNCH || player.state === ActionState.KICK ||
+      player.state === ActionState.SPECIAL);
+    if (playerAttacking && dist < attackRange + 40 && facingPlayer) {
+      if (ai.dodgeCooldown <= 0 && Math.random() < diffSettings.aiDodgeChance) {
+        controls.dodge = true;
+        return controls;
+      }
+      if (Math.random() < diffSettings.aiParryChance) {
+        controls.block = true;
+        return controls;
+      }
+    }
+
+    // Smell blood: swarm a rocked opponent
+    const playerVulnerable = player.state === ActionState.DIZZY;
+
+    // Use special move when power is full
+    const specialRange = ai.specialType === 'takedown' ? attackRange * 1.8 : attackRange * 1.5;
+    if (ai.powerMeter >= POWER_METER_MAX && Math.random() < (playerVulnerable ? 0.6 : 0.3) && dist < specialRange) {
       controls.special = true;
       return controls;
     }
@@ -322,7 +416,8 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
       return controls;
     }
 
-    if (Math.random() > diffSettings.aiReactionChance) return controls;
+    const reaction = playerVulnerable ? Math.min(0.5, diffSettings.aiReactionChance * 2.5) : diffSettings.aiReactionChance;
+    if (Math.random() > reaction) return controls;
 
     if (dist > attackRange + 20) {
       gameState.current.aiMoveTimer = 30 + Math.floor(Math.random() * 30);
@@ -333,7 +428,7 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         gameState.current.aiMoveDirection = -1;
         controls.left = true;
       }
-      if (Math.random() < 0.03 && ai.stamina > 50) {
+      if (Math.random() < weights.takedown * 0.1 && ai.stamina > 50) {
         controls.takedown = true;
       }
     } else if (dist < attackRange && facingPlayer) {
@@ -341,10 +436,13 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
       gameState.current.aiMoveTimer = 0;
 
       const rand = Math.random();
-      const freq = diffSettings.aiAttackFrequency;
-      if (rand < 0.40 * freq && ai.stamina > 20) controls.punch = true;
-      else if (rand < 0.70 * freq && ai.stamina > 20) controls.kick = true;
-      else if (rand < 0.85 * freq && ai.stamina > 40 && dist > ai.width * 0.5) controls.takedown = true;
+      const freq = diffSettings.aiAttackFrequency * (playerVulnerable ? 1.5 : 1);
+      const pPunch = weights.punch * freq;
+      const pKick = pPunch + weights.kick * freq;
+      const pTakedown = pKick + weights.takedown * freq;
+      if (rand < pPunch && ai.stamina > 20) controls.punch = true;
+      else if (rand < pKick && ai.stamina > 20) controls.kick = true;
+      else if (rand < pTakedown && ai.stamina > 40 && dist > ai.width * 0.5) controls.takedown = true;
       else if (Math.random() < diffSettings.aiBlockChance) controls.block = true;
     } else {
       gameState.current.aiMoveTimer = 20 + Math.floor(Math.random() * 20);
@@ -363,9 +461,13 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
   const updateParticles = () => {
     gameState.current.particles = gameState.current.particles.filter(p => p.life > 0);
     gameState.current.particles.forEach(p => {
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.8;
+      if (p.type === 'ring') {
+        p.size += 3;
+      } else {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.type === 'dust' ? 0.15 : 0.8;
+      }
       p.life--;
     });
   };
@@ -381,6 +483,12 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         ctx.rotate(p.life * 0.2);
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
         ctx.restore();
+      } else if (p.type === 'ring') {
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.stroke();
       } else {
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -479,6 +587,49 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
     ctx.restore();
   };
 
+  const drawCenterBanner = (ctx: CanvasRenderingContext2D, text: string, color: string, sub?: string) => {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 44px "Press Start 2P", monospace';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 10;
+    ctx.strokeText(text, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40);
+    ctx.fillStyle = color;
+    ctx.fillText(text, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40);
+    if (sub) {
+      ctx.font = 'bold 14px "Press Start 2P", monospace';
+      ctx.lineWidth = 5;
+      ctx.strokeText(sub, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 10);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(sub, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 10);
+    }
+    ctx.restore();
+  };
+
+  const registerHitTaken = (defender: Fighter) => {
+    const now = Date.now();
+    defender.recentHitsTaken.push(now);
+    defender.recentHitsTaken = defender.recentHitsTaken.filter(t => now - t < DIZZY_WINDOW_MS);
+    if (!defender.hasBeenDizzy &&
+      defender.recentHitsTaken.length >= DIZZY_HITS_REQUIRED &&
+      defender.health > 0 &&
+      defender.state !== ActionState.SLAMMED) {
+      defender.hasBeenDizzy = true;
+      defender.state = ActionState.DIZZY;
+      defender.stateTimer = DIZZY_FRAMES;
+      defender.hitbox = null;
+      playDizzySound(mutedRef.current);
+      playCrowdCheer(mutedRef.current);
+      triggerCommentator(pickRandom(COMMENTATOR_LINES.dizzy));
+      showMoveAnnouncement('ROCKED!', '#facc15', defender.x + defender.width / 2, defender.y - 30);
+      spawnParticles(defender.x + defender.width / 2, defender.y - 10, 8, 'star');
+    }
+  };
+
+  const comboScaledDamage = (base: number, comboCount: number) =>
+    base * Math.max(COMBO_DAMAGE_FLOOR, 1 - Math.max(0, comboCount - 1) * COMBO_DAMAGE_DECAY);
+
   const checkCombatCollisions = (attacker: Fighter, defender: Fighter) => {
     if (!attacker.hitbox) return;
     if ([ActionState.HIT, ActionState.SLAMMED, ActionState.KO, ActionState.SPRAWL].includes(defender.state)) return;
@@ -496,27 +647,50 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
 
     const now = Date.now();
 
+    // Dodge i-frames: attack whiffs, defender earns a counter window
+    if (defender.state === ActionState.DODGE &&
+      defender.stateTimer <= DODGE_IFRAME_START && defender.stateTimer > DODGE_IFRAME_END) {
+      attacker.hitbox = null;
+      defender.counterWindow = COUNTER_WINDOW_FRAMES;
+      defender.stats.dodges++;
+      playWhooshSound(mutedRef.current);
+      triggerCommentator(pickRandom(COMMENTATOR_LINES.dodge));
+      showMoveAnnouncement('MISS!', '#38bdf8', defender.x + defender.width / 2, defender.y - 15);
+      spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.2, 4, 'sweat');
+      return;
+    }
+
+    const defenderDizzy = defender.state === ActionState.DIZZY;
+    const counterMult = attacker.counterWindow > 0 ? COUNTER_DAMAGE_MULT : 1;
+
     // Special move
     if (attacker.state === ActionState.SPECIAL) {
       if (defender.state === ActionState.BLOCK) {
         defender.stamina -= 25;
         defender.state = ActionState.HIT;
         defender.stateTimer = HIT_STUN_FRAMES * 0.5;
-        playBlockSound(isMuted);
+        playBlockSound(mutedRef.current);
       } else {
-        const dmg = attacker.specialDamage * diffSettings.damageMultiplier;
+        const dmg = attacker.specialDamage * diffSettings.damageMultiplier * counterMult * (defenderDizzy ? DIZZY_DAMAGE_MULT : 1);
         defender.health -= dmg;
         attacker.damageDealt += dmg;
+        attacker.stats.damageDealt += dmg;
+        attacker.stats.strikesLanded++;
+        attacker.stats.specialsLanded++;
+        if (counterMult > 1) attacker.counterWindow = 0;
         defender.state = ActionState.SLAMMED;
         defender.stateTimer = SLAMMED_FRAMES;
         defender.hitbox = null;
         defender.vx = 0;
         defender.hitFlash = 8;
+        registerHitTaken(defender);
         spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.3, 20, 'star');
         spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.3, 15, 'blood');
-        playSpecialSound(isMuted);
-        playCrowdCheer(isMuted);
+        spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.3, 1, 'ring');
+        playSpecialSound(mutedRef.current);
+        playCrowdCheer(mutedRef.current);
         applyScreenShake(SCREEN_SHAKE_HEAVY * 1.5);
+        applyHitstop(HITSTOP_SPECIAL);
         triggerCommentator(pickRandom(COMMENTATOR_LINES.special));
         showMoveAnnouncement(
           attacker.specialName,
@@ -525,6 +699,7 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
           attacker.y - 20
         );
       }
+      clampVitals(defender);
       attacker.hitbox = null;
       return;
     }
@@ -534,27 +709,33 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
       if (defender.state === ActionState.TAKEDOWN) {
         attacker.stamina -= 10;
         attacker.hitbox = null;
-        playBlockSound(isMuted);
+        playBlockSound(mutedRef.current);
         defender.stamina -= 10;
         defender.state = ActionState.IDLE;
         defender.stateTimer = 15;
         defender.hitbox = null;
         defender.x -= defender.direction * 20;
+        clampVitals(attacker);
+        clampVitals(defender);
         return;
       } else if (defender.state === ActionState.BLOCK) {
         attacker.stamina -= 15;
         attacker.hitbox = null;
         attacker.x -= attacker.direction * 20;
-        playBlockSound(isMuted);
+        playBlockSound(mutedRef.current);
         defender.state = ActionState.IDLE;
         defender.stateTimer = 15;
         defender.hitbox = null;
         triggerCommentator(pickRandom(COMMENTATOR_LINES.block));
+        clampVitals(attacker);
         return;
       } else {
-        const dmg = attacker.takedownDamage * diffSettings.damageMultiplier;
+        const dmg = attacker.takedownDamage * diffSettings.damageMultiplier * counterMult * (defenderDizzy ? DIZZY_DAMAGE_MULT : 1);
         defender.health -= dmg;
         attacker.damageDealt += dmg;
+        attacker.stats.damageDealt += dmg;
+        attacker.stats.takedowns++;
+        if (counterMult > 1) attacker.counterWindow = 0;
         attacker.powerMeter = Math.min(attacker.maxPowerMeter, attacker.powerMeter + POWER_GAIN_TAKEDOWN);
         defender.powerMeter = Math.min(defender.maxPowerMeter, defender.powerMeter + POWER_GAIN_ON_HIT);
         defender.state = ActionState.SLAMMED;
@@ -563,41 +744,63 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         defender.vx = 0;
         defender.hitFlash = 8;
         defender.direction = defender.x < attacker.x ? 1 : -1;
+        registerHitTaken(defender);
         spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.8, 15, 'blood');
         spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.5, 8, 'sweat');
-        playTakedownSound(isMuted);
-        setTimeout(() => playSlamSound(isMuted), 300);
+        spawnParticles(defender.x + defender.width / 2, GROUND_Y - 10, 10, 'dust');
+        playTakedownSound(mutedRef.current);
+        setTimeout(() => playSlamSound(mutedRef.current), 300);
         applyScreenShake(SCREEN_SHAKE_HEAVY);
+        applyHitstop(HITSTOP_HEAVY);
         triggerCommentator(pickRandom(COMMENTATOR_LINES.takedown));
         showMoveAnnouncement('TAKEDOWN!', '#ef4444', attacker.x + attacker.width / 2, attacker.y - 20);
+        clampVitals(defender);
         attacker.hitbox = null;
         return;
       }
     }
 
     // Punch / Kick
-    const damage = (attacker.state === ActionState.PUNCH ? attacker.punchDamage : attacker.kickDamage) * diffSettings.damageMultiplier;
+    const isKick = attacker.state === ActionState.KICK;
+    const baseDamage = (isKick ? attacker.kickDamage : attacker.punchDamage) * diffSettings.damageMultiplier;
 
     if (defender.state === ActionState.BLOCK) {
-      defender.stamina -= damage * 2;
+      // Perfect block = parry: block started just before the hit landed
+      const blockAge = BLOCK_COOLDOWN - defender.stateTimer;
+      if (blockAge <= PARRY_WINDOW_FRAMES) {
+        attacker.state = ActionState.HIT;
+        attacker.stateTimer = PARRY_STUN_FRAMES;
+        attacker.hitbox = null;
+        attacker.vx = attacker.direction * -3;
+        attacker.comboCount = 0;
+        defender.state = ActionState.IDLE;
+        defender.stateTimer = 0;
+        defender.powerMeter = Math.min(defender.maxPowerMeter, defender.powerMeter + POWER_GAIN_PARRY);
+        defender.counterWindow = COUNTER_WINDOW_FRAMES;
+        defender.stats.parries++;
+        spawnParticles(defender.x + defender.width * (defender.direction === 1 ? 0.9 : 0.1), defender.y + defender.height * 0.3, 10, 'spark');
+        spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.3, 1, 'ring');
+        playParrySound(mutedRef.current);
+        applyHitstop(HITSTOP_HEAVY);
+        applyScreenShake(SCREEN_SHAKE_LIGHT);
+        triggerCommentator(pickRandom(COMMENTATOR_LINES.parry));
+        showMoveAnnouncement('PARRY!', '#22d3ee', defender.x + defender.width / 2, defender.y - 20);
+        return;
+      }
+      defender.stamina -= baseDamage * 2;
       spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.2, 3, 'sweat');
-      playBlockSound(isMuted);
+      playBlockSound(mutedRef.current);
       triggerCommentator(pickRandom(COMMENTATOR_LINES.block));
+      clampVitals(defender);
     } else {
-      defender.health -= damage;
-      attacker.damageDealt += damage;
-      attacker.powerMeter = Math.min(
-        attacker.maxPowerMeter,
-        attacker.powerMeter + (attacker.state === ActionState.PUNCH ? POWER_GAIN_PUNCH : POWER_GAIN_KICK)
-      );
-      defender.powerMeter = Math.min(defender.maxPowerMeter, defender.powerMeter + POWER_GAIN_ON_HIT);
+      const wasDizzy = defenderDizzy;
 
-      // Combo detection
+      // Combo detection (scales damage down on long strings)
       const timeSinceLastHit = now - attacker.lastHitTime;
       if (timeSinceLastHit < COMBO_WINDOW_MS && attacker.lastHitTime > 0) {
         attacker.comboCount++;
         if (attacker.comboCount >= 2) {
-          playComboSound(isMuted, attacker.comboCount);
+          playComboSound(mutedRef.current, attacker.comboCount);
           if (attacker.comboCount >= 3) {
             triggerCommentator(pickRandom(COMMENTATOR_LINES.combo));
             showMoveAnnouncement(`${attacker.comboCount}x COMBO!`, '#f59e0b', attacker.x + attacker.width / 2, attacker.y - 20);
@@ -607,17 +810,36 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         attacker.comboCount = 1;
       }
       attacker.lastHitTime = now;
+      attacker.stats.maxCombo = Math.max(attacker.stats.maxCombo, attacker.comboCount);
+
+      const damage = comboScaledDamage(baseDamage, attacker.comboCount) * counterMult * (wasDizzy ? DIZZY_DAMAGE_MULT : 1);
+      defender.health -= damage;
+      attacker.damageDealt += damage;
+      attacker.stats.damageDealt += damage;
+      attacker.stats.strikesLanded++;
+      if (counterMult > 1) {
+        attacker.counterWindow = 0;
+        showMoveAnnouncement('COUNTER!', '#22d3ee', attacker.x + attacker.width / 2, attacker.y - 40);
+      }
+      attacker.powerMeter = Math.min(
+        attacker.maxPowerMeter,
+        attacker.powerMeter + (isKick ? POWER_GAIN_KICK : POWER_GAIN_PUNCH)
+      );
+      defender.powerMeter = Math.min(defender.maxPowerMeter, defender.powerMeter + POWER_GAIN_ON_HIT);
 
       defender.state = ActionState.HIT;
       defender.stateTimer = HIT_STUN_FRAMES;
       defender.hitbox = null;
       defender.hitFlash = 6;
+      defender.vx = attacker.direction * (isKick ? KNOCKBACK_KICK : KNOCKBACK_PUNCH);
+      registerHitTaken(defender);
 
       spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.2, 12, 'blood');
       spawnParticles(defender.x + defender.width / 2, defender.y + defender.height * 0.2, 5, 'sweat');
 
-      playHitSound(isMuted, attacker.state === ActionState.KICK);
-      applyScreenShake(attacker.state === ActionState.KICK ? SCREEN_SHAKE_LIGHT * 1.5 : SCREEN_SHAKE_LIGHT);
+      playHitSound(mutedRef.current, isKick);
+      applyScreenShake(isKick ? SCREEN_SHAKE_LIGHT * 1.5 : SCREEN_SHAKE_LIGHT);
+      applyHitstop(isKick ? HITSTOP_HEAVY : HITSTOP_LIGHT);
 
       // Low health commentary
       if (defender.health < defender.maxHealth * 0.25) {
@@ -626,13 +848,81 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
         triggerCommentator(pickRandom(COMMENTATOR_LINES.general));
       }
 
-      const moveLabel = attacker.state === ActionState.PUNCH ? 'PUNCH!' : 'KICK!';
-      const moveColor = attacker.state === ActionState.PUNCH ? '#38bdf8' : '#f97316';
-      if (Math.random() < 0.4) {
+      const moveLabel = isKick ? 'KICK!' : 'PUNCH!';
+      const moveColor = isKick ? '#f97316' : '#38bdf8';
+      if (Math.random() < 0.4 && counterMult === 1) {
         showMoveAnnouncement(moveLabel, moveColor, defender.x + defender.width / 2, defender.y - 10);
       }
+      clampVitals(defender);
     }
     attacker.hitbox = null;
+  };
+
+  const stepSimulation = () => {
+    const { player, enemy } = gameState.current;
+
+    updateFighter(player, inputRef.current, enemy);
+    const aiInput = updateAI(enemy, player);
+    updateFighter(enemy, aiInput, player);
+
+    checkCombatCollisions(player, enemy);
+    checkCombatCollisions(enemy, player);
+
+    // Timer
+    const now = Date.now();
+    if (now - gameState.current.lastTimeUpdate > 1000 && !gameState.current.isRoundOver) {
+      if (gameState.current.timeRemaining > 0) {
+        gameState.current.timeRemaining--;
+      }
+      gameState.current.lastTimeUpdate = now;
+    }
+
+    // Check KO
+    if (player.health <= 0 && player.state !== ActionState.KO) {
+      player.state = ActionState.KO;
+      player.health = 0;
+      if (!gameState.current.isRoundOver) {
+        gameState.current.isRoundOver = true;
+        gameState.current.slowMo = KO_SLOWMO_FRAMES;
+        gameState.current.koTarget = player;
+        gameState.current.koBannerTimer = 150;
+        playKOSound(mutedRef.current);
+        enemy.state = ActionState.VICTORY_POSE;
+        setTimeout(() => onRoundEndRef.current({
+          winner: 'ENEMY', method: 'KO',
+          playerStats: { ...player.stats }, enemyStats: { ...enemy.stats }
+        }), 3200);
+      }
+    }
+    if (enemy.health <= 0 && enemy.state !== ActionState.KO) {
+      enemy.state = ActionState.KO;
+      enemy.health = 0;
+      if (!gameState.current.isRoundOver) {
+        gameState.current.isRoundOver = true;
+        gameState.current.slowMo = KO_SLOWMO_FRAMES;
+        gameState.current.koTarget = enemy;
+        gameState.current.koBannerTimer = 150;
+        playKOSound(mutedRef.current);
+        playVictorySound(mutedRef.current);
+        player.state = ActionState.VICTORY_POSE;
+        setTimeout(() => onRoundEndRef.current({
+          winner: 'PLAYER', method: 'KO',
+          playerStats: { ...player.stats }, enemyStats: { ...enemy.stats }
+        }), 3200);
+      }
+    }
+
+    // Timer expires → judge decision
+    if (gameState.current.timeRemaining <= 0 && !gameState.current.isRoundOver) {
+      gameState.current.isRoundOver = true;
+      playRoundBellSound(mutedRef.current);
+      const winner = player.damageDealt > enemy.damageDealt ? 'PLAYER' :
+        enemy.damageDealt > player.damageDealt ? 'ENEMY' : 'DRAW';
+      setTimeout(() => onRoundEndRef.current({
+        winner, method: 'DECISION',
+        playerStats: { ...player.stats }, enemyStats: { ...enemy.stats }
+      }), 2000);
+    }
   };
 
   const gameLoop = (time: number) => {
@@ -646,92 +936,91 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
     }
     const deltaTime = Math.min(time - frameRef.current.lastTime, 100);
     frameRef.current.lastTime = time;
-    frameRef.current.accumulator += deltaTime;
 
+    if (pausedRef.current) {
+      // Freeze the simulation without accumulating time
+      frameRef.current.accumulator = 0;
+      gameState.current.lastTimeUpdate = Date.now();
+      requestRef.current = requestAnimationFrame(gameLoop);
+      return;
+    }
+
+    frameRef.current.accumulator += deltaTime;
     if (frameRef.current.accumulator > 200) frameRef.current.accumulator = 200;
 
     const FIXED_TIME_STEP = 1000 / 60;
 
-    if (!gameState.current.introShoutPlayed) {
-      gameState.current.introShoutPlayed = true;
-      setTimeout(() => {
-        playRoundBellSound(isMuted);
-        triggerCommentator(pickRandom(COMMENTATOR_LINES.start), 2);
-      }, 500);
-    }
-
     while (frameRef.current.accumulator >= FIXED_TIME_STEP) {
-      const { player, enemy } = gameState.current;
+      frameRef.current.accumulator -= FIXED_TIME_STEP;
 
-      updateFighter(player, input, enemy);
-      const aiInput = updateAI(enemy, player);
-      updateFighter(enemy, aiInput, player);
+      // Round intro: fighters wait, banner counts down
+      if (gameState.current.introTimer > 0) {
+        gameState.current.introTimer--;
+        if (gameState.current.introTimer === INTRO_FIGHT_FRAMES && !gameState.current.introBellPlayed) {
+          gameState.current.introBellPlayed = true;
+          playRoundBellSound(mutedRef.current);
+          triggerCommentator(pickRandom(COMMENTATOR_LINES.start), 2);
+        }
+        gameState.current.lastTimeUpdate = Date.now();
+        updateCommentatorShout();
+        continue;
+      }
 
-      checkCombatCollisions(player, enemy);
-      checkCombatCollisions(enemy, player);
+      // Hitstop: freeze everything for impact frames
+      if (gameState.current.hitstop > 0) {
+        gameState.current.hitstop--;
+        gameState.current.lastTimeUpdate = Date.now();
+        continue;
+      }
 
+      // KO slow-motion: run physics at reduced rate
+      if (gameState.current.slowMo > 0) {
+        gameState.current.slowMo--;
+        gameState.current.slowMoTick++;
+        if (gameState.current.slowMoTick % KO_SLOWMO_FACTOR !== 0) {
+          updateParticles();
+          continue;
+        }
+      }
+
+      stepSimulation();
       updateParticles();
       updateCommentatorShout();
+
+      if (gameState.current.koBannerTimer > 0) gameState.current.koBannerTimer--;
 
       // Screen shake decay
       if (gameState.current.screenShake > 0) {
         gameState.current.screenShake *= SCREEN_SHAKE_DECAY;
         if (gameState.current.screenShake < 0.5) gameState.current.screenShake = 0;
       }
-
-      // Timer
-      const now = Date.now();
-      if (now - gameState.current.lastTimeUpdate > 1000 && !gameState.current.isRoundOver) {
-        if (gameState.current.timeRemaining > 0) {
-          gameState.current.timeRemaining--;
-        }
-        gameState.current.lastTimeUpdate = now;
-      }
-
-      // Check KO
-      if (player.health <= 0 && player.state !== ActionState.KO) {
-        player.state = ActionState.KO;
-        player.health = 0;
-        if (!gameState.current.isRoundOver) {
-          gameState.current.isRoundOver = true;
-          playKOSound(isMuted);
-          enemy.state = ActionState.VICTORY_POSE;
-          setTimeout(() => onRoundEnd('ENEMY'), 3000);
-        }
-      }
-      if (enemy.health <= 0 && enemy.state !== ActionState.KO) {
-        enemy.state = ActionState.KO;
-        enemy.health = 0;
-        if (!gameState.current.isRoundOver) {
-          gameState.current.isRoundOver = true;
-          playKOSound(isMuted);
-          playVictorySound(isMuted);
-          player.state = ActionState.VICTORY_POSE;
-          setTimeout(() => onRoundEnd('PLAYER'), 3000);
-        }
-      }
-
-      // Timer expires → judge decision
-      if (gameState.current.timeRemaining <= 0 && !gameState.current.isRoundOver) {
-        gameState.current.isRoundOver = true;
-        playRoundBellSound(isMuted);
-        const winner = player.damageDealt > enemy.damageDealt ? 'PLAYER' :
-          enemy.damageDealt > player.damageDealt ? 'ENEMY' : 'DRAW';
-        setTimeout(() => onRoundEnd(winner), 2000);
-      }
-
-      frameRef.current.accumulator -= FIXED_TIME_STEP;
     }
 
-    // Apply screen shake
+    // ==================== RENDER ====================
     ctx.save();
-    if (gameState.current.screenShake > 0) {
-      const sx = (Math.random() - 0.5) * gameState.current.screenShake;
-      const sy = (Math.random() - 0.5) * gameState.current.screenShake;
-      ctx.translate(sx, sy);
+
+    // KO cinematic zoom toward the fallen fighter
+    if (gameState.current.slowMo > 0 && gameState.current.koTarget) {
+      const t = 1 - gameState.current.slowMo / KO_SLOWMO_FRAMES;
+      const zoom = 1 + Math.min(t * 2, 1) * 0.3;
+      const target = gameState.current.koTarget;
+      const fx = target.x + target.width / 2;
+      const fy = target.y + target.height * 0.7;
+      ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+      ctx.scale(zoom, zoom);
+      ctx.translate(
+        -Math.max(CANVAS_WIDTH * 0.25, Math.min(fx, CANVAS_WIDTH * 0.75)),
+        -Math.max(CANVAS_HEIGHT * 0.35, Math.min(fy, CANVAS_HEIGHT * 0.65))
+      );
+    } else {
+      if (gameState.current.screenShake > 0) {
+        const sx = (Math.random() - 0.5) * gameState.current.screenShake;
+        const sy = (Math.random() - 0.5) * gameState.current.screenShake;
+        ctx.translate(sx, sy);
+      }
     }
 
-    ctx.clearRect(-20, -20, CANVAS_WIDTH + 40, CANVAS_HEIGHT + 40);
+    ctx.clearRect(-CANVAS_WIDTH, -CANVAS_HEIGHT, CANVAS_WIDTH * 3, CANVAS_HEIGHT * 3);
     drawBackground(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
     drawCommentatorShout(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -750,11 +1039,38 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
 
     ctx.restore();
 
+    // Overlays drawn without camera transform
+    if (gameState.current.introTimer > 0) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.restore();
+      if (gameState.current.introTimer > INTRO_FIGHT_FRAMES) {
+        drawCenterBanner(ctx, `ROUND ${round}`, '#e8e4d9', `${playerConfig.name.split(' ')[0]}  VS  ${enemyConfig.name.split(' ')[0]}`);
+      } else {
+        drawCenterBanner(ctx, 'FIGHT!', '#dc2626');
+      }
+    }
+
+    if (gameState.current.koBannerTimer > 0) {
+      const method = gameState.current.koTarget === gameState.current.enemy ? 'KO!' : 'KO!';
+      drawCenterBanner(ctx, method, '#dc2626',
+        gameState.current.koTarget === gameState.current.enemy ? 'WHAT A FINISH!' : 'DOWN GOES THE CHALLENGER!');
+    }
+
     // Dispatch HUD event
     const event = new CustomEvent('game-update', {
       detail: {
-        p1: { health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, maxStamina: player.maxStamina, powerMeter: player.powerMeter, maxPowerMeter: player.maxPowerMeter, name: playerConfig.name, comboCount: player.comboCount },
-        p2: { health: enemy.health, maxHealth: enemy.maxHealth, stamina: enemy.stamina, maxStamina: enemy.maxStamina, powerMeter: enemy.powerMeter, maxPowerMeter: enemy.maxPowerMeter, name: enemyConfig.name, comboCount: enemy.comboCount },
+        p1: {
+          health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, maxStamina: player.maxStamina,
+          powerMeter: player.powerMeter, maxPowerMeter: player.maxPowerMeter, name: playerConfig.name,
+          comboCount: player.comboCount, counterWindow: player.counterWindow, dizzy: player.state === ActionState.DIZZY
+        },
+        p2: {
+          health: enemy.health, maxHealth: enemy.maxHealth, stamina: enemy.stamina, maxStamina: enemy.maxStamina,
+          powerMeter: enemy.powerMeter, maxPowerMeter: enemy.maxPowerMeter, name: enemyConfig.name,
+          comboCount: enemy.comboCount, counterWindow: enemy.counterWindow, dizzy: enemy.state === ActionState.DIZZY
+        },
         time: gameState.current.timeRemaining,
         round
       }
@@ -769,7 +1085,8 @@ function GameCanvas({ onRoundEnd, input, isMuted, playerConfig, enemyConfig, dif
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [input, onRoundEnd]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <canvas

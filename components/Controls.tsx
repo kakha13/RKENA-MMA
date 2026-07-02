@@ -132,6 +132,15 @@ const Controls: React.FC<ControlsProps> = ({ onInput }) => {
               sizeClass="w-14 h-14 landscape:w-11 landscape:h-11"
             />
           </div>
+          {/* Center (Blue) - Dodge */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <FaceBtn
+              action="dodge"
+              label="S"
+              colorClass="bg-gradient-to-b from-sky-400 to-blue-600"
+              sizeClass="w-10 h-10 landscape:w-8 landscape:h-8"
+            />
+          </div>
         </div>
       </div>
     </div>

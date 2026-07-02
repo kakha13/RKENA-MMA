@@ -287,6 +287,93 @@ export const playCrowdCheer = (isMuted: boolean = false) => {
   } catch (e) {}
 };
 
+export const playParrySound = (isMuted: boolean = false) => {
+  if (isMuted) return;
+  try {
+    const ctx = getAudioContext();
+    // Sharp metallic "ting" - high sine harmonics with fast decay
+    const freqs = [1200, 1800, 2400];
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.25 / (i + 1), ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    });
+    // Short click for punch contact
+    const buffer = createNoiseBuffer(ctx);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 2000;
+    const gainN = ctx.createGain();
+    gainN.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainN.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+    noise.connect(filter);
+    filter.connect(gainN);
+    gainN.connect(ctx.destination);
+    noise.start();
+    noise.stop(ctx.currentTime + 0.08);
+  } catch (e) {}
+};
+
+export const playDodgeSound = (isMuted: boolean = false) => {
+  if (isMuted) return;
+  try {
+    const ctx = getAudioContext();
+    // Quick airy swish, higher pitched than an attack whoosh
+    const buffer = createNoiseBuffer(ctx);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2000, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.15);
+    filter.Q.value = 1.2;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+    noise.stop(ctx.currentTime + 0.2);
+  } catch (e) {}
+};
+
+export const playDizzySound = (isMuted: boolean = false) => {
+  if (isMuted) return;
+  try {
+    const ctx = getAudioContext();
+    // Wobbly descending tone - the "rocked" wail
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(700, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(250, ctx.currentTime + 0.8);
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 9;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 40;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    lfo.start();
+    osc.start();
+    osc.stop(ctx.currentTime + 0.85);
+    lfo.stop(ctx.currentTime + 0.85);
+  } catch (e) {}
+};
+
 export const playComboSound = (isMuted: boolean = false, count: number = 2) => {
   if (isMuted) return;
   try {
